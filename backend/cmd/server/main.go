@@ -16,6 +16,7 @@ import (
 	"bookarr/internal/auth"
 	"bookarr/internal/config"
 	"bookarr/internal/db"
+	"bookarr/internal/metadata"
 	"bookarr/internal/prowlarr"
 	"bookarr/internal/qbit"
 	"bookarr/internal/requests"
@@ -67,8 +68,28 @@ func run() error {
 		}
 	}()
 
-	// Start the download watcher. onComplete is nil (noop) until steps 6/7 are wired in.
-	watcher := qbit.NewWatcher(database, qbitClient, nil)
+	// Start the download watcher with step-6 metadata resolution.
+	// Step 7 (file move, ABS rescan, Discord) extends this closure.
+	metaClient := metadata.New(cfg.AudnexusURL)
+	watcher := qbit.NewWatcher(database, qbitClient, func(ctx context.Context, req *db.Request, _ *qbit.TorrentInfo) error {
+		book := metaClient.Resolve(ctx, req.Title, req.Author)
+		metaJSON, err := book.JSON()
+		if err != nil {
+			return fmt.Errorf("serialise metadata: %w", err)
+		}
+		if err := database.UpdateRequestStatus(ctx, req.ID, db.StatusMoving, db.WithMetadata(metaJSON)); err != nil {
+			return fmt.Errorf("persist metadata: %w", err)
+		}
+		slog.Info("metadata resolved",
+			"request_id", req.ID,
+			"title", book.Title,
+			"author", book.Author,
+			"year", book.Year,
+			"narrator", book.Narrator,
+			"series", book.Series,
+		)
+		return nil
+	})
 	watcher.Start(ctx)
 
 	r := buildRouter(database, cfg, tokenCfg, prowlarrClient, qbitClient)
