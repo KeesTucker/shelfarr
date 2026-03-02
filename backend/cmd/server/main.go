@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -47,7 +49,29 @@ func run() error {
 		Expiry: cfg.JWTExpiry,
 	}
 
-	r := buildRouter(database, cfg, tokenCfg)
+	// Create clients here so both the router and the watcher share the same instances.
+	prowlarrClient := prowlarr.New(cfg.ProwlarrURL, cfg.ProwlarrAPIKey)
+	qbitClient := qbit.New(cfg.QBitURL, cfg.QBitUsername, cfg.QBitPassword)
+
+	// Context cancelled on SIGINT/SIGTERM for clean goroutine shutdown.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		select {
+		case <-sigCh:
+			slog.Info("shutdown signal received")
+			cancel()
+		case <-ctx.Done():
+		}
+	}()
+
+	// Start the download watcher. onComplete is nil (noop) until steps 6/7 are wired in.
+	watcher := qbit.NewWatcher(database, qbitClient, nil)
+	watcher.Start(ctx)
+
+	r := buildRouter(database, cfg, tokenCfg, prowlarrClient, qbitClient)
 
 	slog.Info("server listening", "port", cfg.Port)
 	return http.ListenAndServe(":"+cfg.Port, r)
@@ -56,15 +80,12 @@ func run() error {
 // buildRouter wires all routes. Auth-protected routes are added in a sub-router
 // that applies the Authenticate middleware. New handler groups are mounted here
 // as they are built in subsequent steps.
-func buildRouter(database *db.DB, cfg *config.Config, tokenCfg auth.TokenConfig) http.Handler {
+func buildRouter(database *db.DB, cfg *config.Config, tokenCfg auth.TokenConfig, prowlarrClient *prowlarr.Client, qbitClient *qbit.Client) http.Handler {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
-
-	prowlarrClient := prowlarr.New(cfg.ProwlarrURL, cfg.ProwlarrAPIKey)
-	qbitClient := qbit.New(cfg.QBitURL, cfg.QBitUsername, cfg.QBitPassword)
 
 	authHandler := auth.NewHandler(database, tokenCfg)
 	searchHandler := prowlarr.NewHandler(prowlarrClient)
