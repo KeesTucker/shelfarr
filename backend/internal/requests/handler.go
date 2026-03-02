@@ -24,7 +24,7 @@ type Handler struct {
 	db       *db.DB
 	prowlarr *prowlarr.Client
 	qbit     *qbit.Client
-	savePath string // QBIT_DOWNLOAD_DIR
+	savePath string // DOWNLOAD_DIR
 	category string // QBIT_CATEGORY (empty = uncategorised)
 }
 

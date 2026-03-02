@@ -148,7 +148,7 @@ func buildRouter(database *db.DB, cfg *config.Config, tokenCfg auth.TokenConfig,
 
 	authHandler := auth.NewHandler(database, tokenCfg)
 	searchHandler := prowlarr.NewHandler(prowlarrClient)
-	requestsHandler := requests.New(database, prowlarrClient, qbitClient, cfg.QBitDownloadDir, cfg.QBitCategory)
+	requestsHandler := requests.New(database, prowlarrClient, qbitClient, cfg.DownloadDir, cfg.QBitCategory)
 
 	// Public — no JWT required.
 	r.Post("/api/auth/login", authHandler.Login)

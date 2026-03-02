@@ -19,18 +19,18 @@ type Config struct {
 	ProwlarrAPIKey string
 
 	// qBittorrent
-	QBitURL         string
-	QBitUsername    string
-	QBitPassword    string
-	QBitDownloadDir string
-	QBitCategory    string
+	QBitURL      string
+	QBitUsername string
+	QBitPassword string
+	DownloadDir  string
+	QBitCategory string
 
 	// Metadata sources
 	AudnexusURL string // optional; empty string disables Audnexus lookups
 
 	// Library
 	// WatchDir is the local path where Syncthing delivers completed files from
-	// the seedbox. Defaults to QBIT_DOWNLOAD_DIR for non-Syncthing setups where
+	// the seedbox. Defaults to DOWNLOAD_DIR for non-Syncthing setups where
 	// qBit runs locally and files are accessible directly.
 	WatchDir   string
 	LibraryDir string
@@ -85,10 +85,10 @@ func Load() (*Config, error) {
 		QBitURL:           getenv("QBIT_URL", ""),
 		QBitUsername:      getenv("QBIT_USERNAME", "admin"),
 		QBitPassword:      getenv("QBIT_PASSWORD", ""),
-		QBitDownloadDir:   getenv("QBIT_DOWNLOAD_DIR", "/downloads/audiobooks"),
+		DownloadDir:       getenv("DOWNLOAD_DIR", "/downloads/audiobooks"),
 		QBitCategory:      getenv("QBIT_CATEGORY", ""),
 		AudnexusURL:       getenv("AUDNEXUS_URL", ""),
-		WatchDir:          getenv("WATCH_DIR", getenv("QBIT_DOWNLOAD_DIR", "/downloads/audiobooks")),
+		WatchDir:          getenv("WATCH_DIR", getenv("DOWNLOAD_DIR", "/downloads/audiobooks")),
 		LibraryDir:        getenv("LIBRARY_DIR", "/audiobooks"),
 		WatchTimeout:      watchTimeout,
 		ABSURL:            getenv("ABS_URL", ""),
