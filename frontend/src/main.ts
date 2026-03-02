@@ -1,24 +1,25 @@
-import './style.css'
-import typescriptLogo from './typescript.svg'
-import viteLogo from '/vite.svg'
-import { setupCounter } from './counter.ts'
+import './style.css';
+import { register, start } from './router.js';
+import { loginPage } from './pages/login.js';
+import { getToken } from './api.js';
 
-document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
-  <div>
-    <a href="https://vite.dev" target="_blank">
-      <img src="${viteLogo}" class="logo" alt="Vite logo" />
-    </a>
-    <a href="https://www.typescriptlang.org/" target="_blank">
-      <img src="${typescriptLogo}" class="logo vanilla" alt="TypeScript logo" />
-    </a>
-    <h1>Vite + TypeScript</h1>
-    <div class="card">
-      <button id="counter" type="button"></button>
-    </div>
-    <p class="read-the-docs">
-      Click on the Vite and TypeScript logos to learn more
-    </p>
-  </div>
-`
+register('/login', loginPage);
 
-setupCounter(document.querySelector<HTMLButtonElement>('#counter')!)
+register('/', () => {
+  if (!getToken()) {
+    window.location.replace('/login');
+    return document.createElement('div');
+  }
+  // Placeholder — replaced in step 10
+  const el = document.createElement('div');
+  el.className = 'min-h-screen bg-zinc-950 p-8 text-zinc-50';
+  el.textContent = 'Welcome to Bookarr — search coming soon!';
+  return el;
+});
+
+register('*', () => {
+  window.location.replace('/login');
+  return document.createElement('div');
+});
+
+void start();

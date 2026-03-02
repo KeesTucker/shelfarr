@@ -1,3 +1,6 @@
 /.claude/*
 /.idea/*
 /backend/.run/*
+/backend/bookarr-dev.db
+/backend/bookarr-dev.db-shm
+/backend/bookarr-dev.db-wal
