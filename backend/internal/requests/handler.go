@@ -25,15 +25,17 @@ type Handler struct {
 	prowlarr *prowlarr.Client
 	qbit     *qbit.Client
 	savePath string // QBIT_DOWNLOAD_DIR
+	category string // QBIT_CATEGORY (empty = uncategorised)
 }
 
 // New creates a Handler wired to the given dependencies.
-func New(database *db.DB, p *prowlarr.Client, q *qbit.Client, savePath string) *Handler {
+func New(database *db.DB, p *prowlarr.Client, q *qbit.Client, savePath, category string) *Handler {
 	return &Handler{
 		db:       database,
 		prowlarr: p,
 		qbit:     q,
 		savePath: savePath,
+		category: category,
 	}
 }
 
@@ -94,7 +96,7 @@ func (h *Handler) Submit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Add torrent to qBittorrent and retrieve the assigned infohash.
-	hash, err := h.qbit.AddTorrent(r.Context(), release.DownloadURL, h.savePath)
+	hash, err := h.qbit.AddTorrent(r.Context(), release.DownloadURL, h.savePath, h.category)
 	if err != nil {
 		slog.Error("add torrent to qbit", "guid", body.TorrentGUID, "err", err)
 		respond.Error(w, http.StatusBadGateway, "could not add torrent to qBittorrent")

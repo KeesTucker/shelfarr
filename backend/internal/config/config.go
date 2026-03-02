@@ -23,6 +23,7 @@ type Config struct {
 	QBitUsername    string
 	QBitPassword    string
 	QBitDownloadDir string
+	QBitCategory    string
 
 	// Metadata sources
 	AudnexusURL string // optional; empty string disables Audnexus lookups
@@ -85,6 +86,7 @@ func Load() (*Config, error) {
 		QBitUsername:      getenv("QBIT_USERNAME", "admin"),
 		QBitPassword:      getenv("QBIT_PASSWORD", ""),
 		QBitDownloadDir:   getenv("QBIT_DOWNLOAD_DIR", "/downloads/audiobooks"),
+		QBitCategory:      getenv("QBIT_CATEGORY", ""),
 		AudnexusURL:       getenv("AUDNEXUS_URL", ""),
 		WatchDir:          getenv("WATCH_DIR", getenv("QBIT_DOWNLOAD_DIR", "/downloads/audiobooks")),
 		LibraryDir:        getenv("LIBRARY_DIR", "/audiobooks"),

@@ -4,6 +4,7 @@
 package qbit
 
 import (
+	"bytes"
 	"context"
 	"encoding/base32"
 	"encoding/hex"
@@ -11,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/url"
 	"strings"
@@ -27,7 +29,7 @@ type TorrentInfo struct {
 	Hash     string  `json:"hash"`
 	Name     string  `json:"name"`
 	Progress float64 `json:"progress"`
-	State    string  `json:"state"`    // e.g. "downloading", "seeding", "error"
+	State    string  `json:"state"` // e.g. "downloading", "seeding", "error"
 	SavePath string  `json:"save_path"`
 	AddedOn  int64   `json:"added_on"` // unix timestamp
 }
@@ -55,37 +57,37 @@ func New(baseURL, username, password string) *Client {
 }
 
 // AddTorrent sends a magnet URI or torrent URL to qBittorrent with the given
-// save path and returns the torrent infohash. For magnet URIs the hash is
-// parsed directly from the URI; for HTTP torrent URLs qBittorrent is polled
-// briefly (up to 5 s) to discover the hash assigned after download.
-func (c *Client) AddTorrent(ctx context.Context, downloadURL, savePath string) (string, error) {
+// save path and category, returning the torrent infohash. category may be
+// empty to leave the torrent uncategorised.
+//
+// Magnet URIs: the infohash is parsed directly and the URI is posted to qBit.
+//
+// HTTP torrent URLs: our backend fetches the .torrent bytes (the Prowlarr
+// proxy URL carries the API key, so private-tracker auth is handled here, not
+// by qBittorrent), then uploads the file directly via multipart. qBit is then
+// polled briefly to discover the assigned infohash.
+func (c *Client) AddTorrent(ctx context.Context, downloadURL, savePath, category string) (string, error) {
 	if c.baseURL == "" {
 		return "", fmt.Errorf("qbit: QBIT_URL is not configured")
 	}
 
-	isMagnet := strings.HasPrefix(downloadURL, "magnet:")
-
-	var magnetInfoHash string
-	if isMagnet {
-		var ok bool
-		magnetInfoHash, ok = parseMagnetHash(downloadURL)
+	if strings.HasPrefix(downloadURL, "magnet:") {
+		hash, ok := parseMagnetHash(downloadURL)
 		if !ok {
 			return "", fmt.Errorf("qbit: could not parse infohash from magnet URI")
 		}
+		if err := c.postTorrent(ctx, downloadURL, savePath, category); err != nil {
+			return "", err
+		}
+		return hash, nil
 	}
 
+	// HTTP torrent URL: download the file ourselves and upload to qBit so that
+	// private-tracker authentication is handled by our backend.
 	addedAfter := time.Now().Unix()
-
-	if err := c.postTorrent(ctx, downloadURL, savePath); err != nil {
+	if err := c.fetchAndPostTorrent(ctx, downloadURL, savePath, category); err != nil {
 		return "", err
 	}
-
-	if isMagnet {
-		return magnetInfoHash, nil
-	}
-
-	// For HTTP torrent URLs qBittorrent downloads the .torrent file
-	// asynchronously, so we poll until the new entry appears.
 	return c.findRecentlyAdded(ctx, addedAfter)
 }
 
@@ -130,12 +132,15 @@ func (c *Client) GetTorrent(ctx context.Context, hash string) (*TorrentInfo, err
 
 // ── internal helpers ──────────────────────────────────────────────────────────
 
-// postTorrent POSTs a magnet URI or torrent URL to qBittorrent's add endpoint.
-func (c *Client) postTorrent(ctx context.Context, downloadURL, savePath string) error {
+// postTorrent POSTs a magnet URI to qBittorrent's add endpoint.
+func (c *Client) postTorrent(ctx context.Context, downloadURL, savePath, category string) error {
 	makeReq := func() (*http.Request, error) {
 		form := url.Values{}
 		form.Set("urls", downloadURL)
 		form.Set("savepath", savePath)
+		if category != "" {
+			form.Set("category", category)
+		}
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost,
 			c.baseURL+"/api/v2/torrents/add",
 			strings.NewReader(form.Encode()))
@@ -159,11 +164,78 @@ func (c *Client) postTorrent(ctx context.Context, downloadURL, savePath string) 
 	return nil
 }
 
+// fetchAndPostTorrent downloads the .torrent file at downloadURL using our own
+// HTTP client, then uploads the bytes to qBittorrent via multipart form. This
+// handles private-tracker URLs (e.g. Prowlarr proxy links) that embed API-key
+// auth in the URL — qBittorrent itself never needs to reach the tracker.
+func (c *Client) fetchAndPostTorrent(ctx context.Context, downloadURL, savePath, category string) error {
+	// Step 1: fetch the .torrent bytes.
+	fetchReq, err := http.NewRequestWithContext(ctx, http.MethodGet, downloadURL, nil)
+	if err != nil {
+		return fmt.Errorf("qbit fetch torrent: build request: %w", err)
+	}
+	fetchResp, err := c.http.Do(fetchReq)
+	if err != nil {
+		return fmt.Errorf("qbit fetch torrent: %w", err)
+	}
+	defer fetchResp.Body.Close()
+	if fetchResp.StatusCode != http.StatusOK {
+		return fmt.Errorf("qbit fetch torrent: status %d", fetchResp.StatusCode)
+	}
+	torrentBytes, err := io.ReadAll(fetchResp.Body)
+	if err != nil {
+		return fmt.Errorf("qbit fetch torrent: read body: %w", err)
+	}
+
+	// Step 2: upload to qBit as a multipart file.
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	fw, err := mw.CreateFormFile("torrents", "upload.torrent")
+	if err != nil {
+		return fmt.Errorf("qbit upload torrent: create form file: %w", err)
+	}
+	if _, err := fw.Write(torrentBytes); err != nil {
+		return fmt.Errorf("qbit upload torrent: write bytes: %w", err)
+	}
+	if err := mw.WriteField("savepath", savePath); err != nil {
+		return fmt.Errorf("qbit upload torrent: write savepath: %w", err)
+	}
+	if category != "" {
+		if err := mw.WriteField("category", category); err != nil {
+			return fmt.Errorf("qbit upload torrent: write category: %w", err)
+		}
+	}
+	mw.Close()
+
+	ct := mw.FormDataContentType()
+	makeReq := func() (*http.Request, error) {
+		r, err := http.NewRequestWithContext(ctx, http.MethodPost,
+			c.baseURL+"/api/v2/torrents/add",
+			bytes.NewReader(buf.Bytes()))
+		if err != nil {
+			return nil, err
+		}
+		r.Header.Set("Content-Type", ct)
+		return r, nil
+	}
+
+	addResp, err := c.doWithAuth(ctx, makeReq)
+	if err != nil {
+		return fmt.Errorf("qbit upload torrent: %w", err)
+	}
+	defer addResp.Body.Close()
+	body, _ := io.ReadAll(addResp.Body)
+	if addResp.StatusCode != http.StatusOK || strings.TrimSpace(string(body)) != "Ok." {
+		return fmt.Errorf("qbit upload torrent: unexpected response %d %q", addResp.StatusCode, string(body))
+	}
+	return nil
+}
+
 // findRecentlyAdded polls the full torrent list and returns the hash of the
 // first torrent whose added_on timestamp is >= addedAfter. Retries up to 5
 // times with 1-second pauses, respecting context cancellation.
 func (c *Client) findRecentlyAdded(ctx context.Context, addedAfter int64) (string, error) {
-	for attempt := 0; attempt < 5; attempt++ {
+	for attempt := 0; attempt < 15; attempt++ {
 		select {
 		case <-ctx.Done():
 			return "", ctx.Err()
