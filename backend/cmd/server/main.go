@@ -153,6 +153,9 @@ func buildRouter(database *db.DB, cfg *config.Config, tokenCfg auth.TokenConfig,
 	// Public — no JWT required.
 	r.Post("/api/auth/login", authHandler.Login)
 
+	// Wizarr / provisioning: service-token auth, no user JWT required.
+	r.With(auth.RequireServiceToken(cfg.ServiceToken)).Post("/api/users", authHandler.CreateUser)
+
 	// Protected — JWT required for all routes in this group.
 	r.Group(func(r chi.Router) {
 		r.Use(auth.Authenticate(tokenCfg))
@@ -161,8 +164,6 @@ func buildRouter(database *db.DB, cfg *config.Config, tokenCfg auth.TokenConfig,
 		r.Post("/api/requests", requestsHandler.Submit)
 		r.Get("/api/requests", requestsHandler.List)
 		r.Get("/api/requests/{id}", requestsHandler.Get)
-
-		// User management (Wizarr) route is mounted here in a later step.
 	})
 
 	return r

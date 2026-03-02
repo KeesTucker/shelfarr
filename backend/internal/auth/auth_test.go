@@ -231,8 +231,8 @@ func TestLoginOK(t *testing.T) {
 	}
 
 	var resp struct {
-		Token string          `json:"token"`
-		User  auth.UserDTO    `json:"user"`
+		Token string       `json:"token"`
+		User  auth.UserDTO `json:"user"`
 	}
 	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
 		t.Fatal(err)
@@ -302,6 +302,155 @@ func TestLoginBadJSON(t *testing.T) {
 
 	if rr.Code != http.StatusBadRequest {
 		t.Errorf("expected 400, got %d", rr.Code)
+	}
+}
+
+// ── middleware: RequireServiceToken ───────────────────────────────────────────
+
+func TestRequireServiceToken(t *testing.T) {
+	const token = "super-secret-service-token"
+
+	inner := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+
+	cases := []struct {
+		name       string
+		configured string // token passed to RequireServiceToken
+		header     string // Authorization header value sent by client
+		wantStatus int
+	}{
+		{
+			name:       "valid token passes through",
+			configured: token,
+			header:     "Bearer " + token,
+			wantStatus: http.StatusOK,
+		},
+		{
+			name:       "missing header returns 403",
+			configured: token,
+			header:     "",
+			wantStatus: http.StatusForbidden,
+		},
+		{
+			name:       "wrong token returns 403",
+			configured: token,
+			header:     "Bearer wrong-token",
+			wantStatus: http.StatusForbidden,
+		},
+		{
+			name:       "wrong scheme returns 403",
+			configured: token,
+			header:     "Token " + token, // not Bearer
+			wantStatus: http.StatusForbidden,
+		},
+		{
+			name:       "unconfigured service token returns 503",
+			configured: "", // empty = SERVICE_TOKEN not set
+			header:     "Bearer anything",
+			wantStatus: http.StatusServiceUnavailable,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			handler := auth.RequireServiceToken(tc.configured)(inner)
+			req := httptest.NewRequest(http.MethodPost, "/api/users", nil)
+			if tc.header != "" {
+				req.Header.Set("Authorization", tc.header)
+			}
+			rr := httptest.NewRecorder()
+			handler.ServeHTTP(rr, req)
+			if rr.Code != tc.wantStatus {
+				t.Errorf("expected %d, got %d", tc.wantStatus, rr.Code)
+			}
+		})
+	}
+}
+
+// ── handler: CreateUser ───────────────────────────────────────────────────────
+
+func TestCreateUser(t *testing.T) {
+	d := openTestDB(t)
+	h := auth.NewHandler(d, testTokenCfg())
+
+	post := func(body string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPost, "/api/users", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		rr := httptest.NewRecorder()
+		h.CreateUser(rr, req)
+		return rr
+	}
+
+	t.Run("valid request returns 201 with user DTO", func(t *testing.T) {
+		rr := post(`{"username":"wizarr-user","password":"securepass"}`)
+		if rr.Code != http.StatusCreated {
+			t.Fatalf("expected 201, got %d — body: %s", rr.Code, rr.Body)
+		}
+		var dto auth.UserDTO
+		if err := json.NewDecoder(rr.Body).Decode(&dto); err != nil {
+			t.Fatal(err)
+		}
+		if dto.Username != "wizarr-user" {
+			t.Errorf("unexpected username: %s", dto.Username)
+		}
+		if dto.ID == "" {
+			t.Error("expected non-empty ID")
+		}
+		if dto.Role != "user" {
+			t.Errorf("expected role 'user', got %q", dto.Role)
+		}
+	})
+
+	t.Run("created user can log in with the provided password", func(t *testing.T) {
+		post(`{"username":"login-verify","password":"mypassword"}`)
+
+		req := httptest.NewRequest(http.MethodPost, "/api/auth/login",
+			strings.NewReader(`{"username":"login-verify","password":"mypassword"}`))
+		rr := httptest.NewRecorder()
+		h.Login(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("login: expected 200, got %d — %s", rr.Code, rr.Body)
+		}
+	})
+
+	t.Run("duplicate username returns 409", func(t *testing.T) {
+		post(`{"username":"dup-user","password":"pw1"}`)
+		rr := post(`{"username":"dup-user","password":"pw2"}`)
+		if rr.Code != http.StatusConflict {
+			t.Errorf("expected 409, got %d — %s", rr.Code, rr.Body)
+		}
+	})
+
+	t.Run("provisioned user always gets role user", func(t *testing.T) {
+		rr := post(`{"username":"role-check","password":"pw123"}`)
+		if rr.Code != http.StatusCreated {
+			t.Fatalf("expected 201, got %d", rr.Code)
+		}
+		var dto auth.UserDTO
+		if err := json.NewDecoder(rr.Body).Decode(&dto); err != nil {
+			t.Fatal(err)
+		}
+		if dto.Role != "user" {
+			t.Errorf("expected role 'user', got %q", dto.Role)
+		}
+	})
+
+	for _, body := range []struct {
+		name string
+		json string
+	}{
+		{"missing username", `{"password":"pw"}`},
+		{"missing password", `{"username":"nopass"}`},
+		{"empty fields", `{}`},
+		{"bad JSON", `not json`},
+	} {
+		t.Run(body.name+" returns 400", func(t *testing.T) {
+			rr := post(body.json)
+			if rr.Code != http.StatusBadRequest {
+				t.Errorf("expected 400, got %d", rr.Code)
+			}
+		})
 	}
 }
 

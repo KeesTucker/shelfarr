@@ -4,6 +4,9 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"strings"
+
+	"github.com/google/uuid"
 
 	"bookarr/internal/db"
 	"bookarr/internal/respond"
@@ -78,6 +81,50 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		Token: token,
 		User:  UserDTO{ID: user.ID, Username: user.Username, Role: user.Role},
 	})
+}
+
+// createUserRequest is the body accepted by CreateUser.
+type createUserRequest struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+// CreateUser provisions a new regular user account. Intended for Wizarr (and
+// similar provisioning tools) that call this endpoint with a shared service
+// token rather than a user JWT.
+//
+//	POST /api/users
+func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
+	var req createUserRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respond.Error(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if req.Username == "" || req.Password == "" {
+		respond.Error(w, http.StatusBadRequest, "username and password required")
+		return
+	}
+
+	hash, err := HashPassword(req.Password)
+	if err != nil {
+		slog.Error("hash password for new user", "err", err)
+		respond.Error(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+
+	id := uuid.NewString()
+	if err := h.db.CreateUser(r.Context(), id, req.Username, hash, "user"); err != nil {
+		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+			respond.Error(w, http.StatusConflict, "username already taken")
+			return
+		}
+		slog.Error("create user", "err", err)
+		respond.Error(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+
+	slog.Info("user created via service token", "username", req.Username, "id", id)
+	respond.JSON(w, http.StatusCreated, UserDTO{ID: id, Username: req.Username, Role: "user"})
 }
 
 // Me returns the current user's profile. The DB is consulted so the response
