@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -95,7 +96,8 @@ func (h *Handler) Submit(w http.ResponseWriter, r *http.Request) {
 	// Add torrent to qBittorrent and retrieve the assigned infohash.
 	hash, err := h.qbit.AddTorrent(r.Context(), release.DownloadURL, h.savePath)
 	if err != nil {
-		respond.Error(w, http.StatusBadGateway, "could not add torrent to qBittorrent: "+err.Error())
+		slog.Error("add torrent to qbit", "guid", body.TorrentGUID, "err", err)
+		respond.Error(w, http.StatusBadGateway, "could not add torrent to qBittorrent")
 		return
 	}
 
@@ -111,6 +113,7 @@ func (h *Handler) Submit(w http.ResponseWriter, r *http.Request) {
 		Status:      db.StatusDownloading,
 	}
 	if err := h.db.CreateRequest(r.Context(), req); err != nil {
+		slog.Error("create request", "user_id", claims.UserID, "err", err)
 		respond.Error(w, http.StatusInternalServerError, "failed to save request")
 		return
 	}
@@ -127,6 +130,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	if claims.Role == "admin" {
 		rows, err := h.db.ListAllRequestsWithUser(r.Context())
 		if err != nil {
+			slog.Error("list all requests", "err", err)
 			respond.Error(w, http.StatusInternalServerError, "failed to list requests")
 			return
 		}
@@ -143,6 +147,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 
 	rows, err := h.db.ListRequestsByUser(r.Context(), claims.UserID)
 	if err != nil {
+		slog.Error("list requests by user", "user_id", claims.UserID, "err", err)
 		respond.Error(w, http.StatusInternalServerError, "failed to list requests")
 		return
 	}
@@ -165,6 +170,7 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 			respond.Error(w, http.StatusNotFound, "request not found")
 			return
 		}
+		slog.Error("get request", "id", id, "err", err)
 		respond.Error(w, http.StatusInternalServerError, "failed to get request")
 		return
 	}
