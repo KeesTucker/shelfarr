@@ -23,6 +23,11 @@ import (
 // ErrNotFound is returned when a requested torrent is not present in qBittorrent.
 var ErrNotFound = errors.New("qbit: torrent not found")
 
+// appPreferences is the subset of /api/v2/app/preferences we care about.
+type appPreferences struct {
+	SavePath string `json:"save_path"`
+}
+
 // TorrentInfo is a subset of the fields returned by the /api/v2/torrents/info
 // endpoint. Progress runs from 0.0 (not started) to 1.0 (complete).
 type TorrentInfo struct {
@@ -128,6 +133,38 @@ func (c *Client) GetTorrent(ctx context.Context, hash string) (*TorrentInfo, err
 		return nil, ErrNotFound
 	}
 	return &torrents[0], nil
+}
+
+// GetDefaultSavePath returns the default download directory configured in
+// qBittorrent (Settings → Downloads → Default Save Path).
+func (c *Client) GetDefaultSavePath(ctx context.Context) (string, error) {
+	if c.baseURL == "" {
+		return "", fmt.Errorf("qbit: QBIT_URL is not configured")
+	}
+
+	makeReq := func() (*http.Request, error) {
+		return http.NewRequestWithContext(ctx, http.MethodGet,
+			c.baseURL+"/api/v2/app/preferences", nil)
+	}
+
+	resp, err := c.doWithAuth(ctx, makeReq)
+	if err != nil {
+		return "", fmt.Errorf("qbit get preferences: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("qbit get preferences: unexpected status %d", resp.StatusCode)
+	}
+
+	var prefs appPreferences
+	if err := json.NewDecoder(resp.Body).Decode(&prefs); err != nil {
+		return "", fmt.Errorf("qbit get preferences: decode: %w", err)
+	}
+	if prefs.SavePath == "" {
+		return "", fmt.Errorf("qbit get preferences: save_path is empty")
+	}
+	return prefs.SavePath, nil
 }
 
 // ── internal helpers ──────────────────────────────────────────────────────────

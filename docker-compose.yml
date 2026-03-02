@@ -1,0 +1,51 @@
+services:
+  bookarr:
+    build: .
+    ports:
+      - "8008:8008"
+    volumes:
+      - ./data:/data
+      - ./downloads:/downloads/audiobooks
+      - ./library:/audiobooks
+    environment:
+      # ── Database ──────────────────────────────────────────────────────────
+      DB_PATH: /data/bookarr.db
+
+      # ── Prowlarr ──────────────────────────────────────────────────────────
+      PROWLARR_URL: http://prowlarr:9696
+      PROWLARR_API_KEY: ${PROWLARR_API_KEY}
+
+      # ── qBittorrent ───────────────────────────────────────────────────────
+      QBIT_URL: http://qbittorrent:8080
+      QBIT_USERNAME: ${QBIT_USERNAME}
+      QBIT_PASSWORD: ${QBIT_PASSWORD}
+      QBIT_CATEGORY: bookarr
+
+      # ── Library ───────────────────────────────────────────────────────────
+      LIBRARY_DIR: /audiobooks
+      # WATCH_DIR defaults to qBittorrent's save path (read via API at startup).
+      # Set explicitly only when using Syncthing from a remote seedbox.
+      WATCH_DIR: /downloads/audiobooks
+      WATCH_TIMEOUT: 24h
+
+      # ── Metadata ──────────────────────────────────────────────────────────
+      # AUDNEXUS_URL: http://localhost:[audnexus-port]
+
+      # ── Discord ───────────────────────────────────────────────────────────
+      DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL:-}
+
+      # ── Auth ──────────────────────────────────────────────────────────────
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRY: 24h
+
+      # ── Admin seed (first startup only) ───────────────────────────────────
+      ADMIN_USERNAME: admin
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+
+      # ── Wizarr integration ────────────────────────────────────────────────
+      SERVICE_TOKEN: ${SERVICE_TOKEN:-}
+
+      # ── Server ────────────────────────────────────────────────────────────
+      PORT: "8008"
+      STATIC_DIR: /app/static
+    restart: always

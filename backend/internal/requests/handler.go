@@ -24,17 +24,15 @@ type Handler struct {
 	db       *db.DB
 	prowlarr *prowlarr.Client
 	qbit     *qbit.Client
-	savePath string // DOWNLOAD_DIR
 	category string // QBIT_CATEGORY (empty = uncategorised)
 }
 
 // New creates a Handler wired to the given dependencies.
-func New(database *db.DB, p *prowlarr.Client, q *qbit.Client, savePath, category string) *Handler {
+func New(database *db.DB, p *prowlarr.Client, q *qbit.Client, category string) *Handler {
 	return &Handler{
 		db:       database,
 		prowlarr: p,
 		qbit:     q,
-		savePath: savePath,
 		category: category,
 	}
 }
@@ -95,8 +93,16 @@ func (h *Handler) Submit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Fetch the configured save path directly from qBittorrent.
+	savePath, err := h.qbit.GetDefaultSavePath(r.Context())
+	if err != nil {
+		slog.Error("get qbit save path", "err", err)
+		respond.Error(w, http.StatusBadGateway, "could not determine qBittorrent download path")
+		return
+	}
+
 	// Add torrent to qBittorrent and retrieve the assigned infohash.
-	hash, err := h.qbit.AddTorrent(r.Context(), release.DownloadURL, h.savePath, h.category)
+	hash, err := h.qbit.AddTorrent(r.Context(), release.DownloadURL, savePath, h.category)
 	if err != nil {
 		slog.Error("add torrent to qbit", "guid", body.TorrentGUID, "err", err)
 		respond.Error(w, http.StatusBadGateway, "could not add torrent to qBittorrent")

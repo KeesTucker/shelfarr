@@ -71,7 +71,17 @@ func run() error {
 	}()
 
 	metaClient := metadata.New(cfg.AudnexusURL)
-	mover := library.New(cfg.WatchDir, cfg.LibraryDir, cfg.WatchTimeout)
+
+	watchDir := cfg.WatchDir
+	if watchDir == "" {
+		wd, err := qbitClient.GetDefaultSavePath(ctx)
+		if err != nil {
+			return fmt.Errorf("WATCH_DIR not set and could not read save path from qBittorrent: %w", err)
+		}
+		slog.Info("resolved watch dir from qBittorrent", "path", wd)
+		watchDir = wd
+	}
+	mover := library.New(watchDir, cfg.LibraryDir, cfg.WatchTimeout)
 
 	// lookupUsername returns the username for a user ID, falling back to the
 	// raw ID if the DB lookup fails (e.g. user deleted between request and completion).
@@ -130,7 +140,7 @@ func run() error {
 	watcher := qbit.NewWatcher(database, qbitClient, onComplete, onFail)
 	watcher.Start(ctx)
 
-	r := buildRouter(database, cfg, tokenCfg, prowlarrClient, qbitClient)
+	r := buildRouter(database, cfg, tokenCfg, prowlarrClient, qbitClient, cfg.StaticDir)
 
 	slog.Info("server listening", "port", cfg.Port)
 	return http.ListenAndServe(":"+cfg.Port, r)
@@ -139,7 +149,7 @@ func run() error {
 // buildRouter wires all routes. Auth-protected routes are added in a sub-router
 // that applies the Authenticate middleware. New handler groups are mounted here
 // as they are built in subsequent steps.
-func buildRouter(database *db.DB, cfg *config.Config, tokenCfg auth.TokenConfig, prowlarrClient *prowlarr.Client, qbitClient *qbit.Client) http.Handler {
+func buildRouter(database *db.DB, cfg *config.Config, tokenCfg auth.TokenConfig, prowlarrClient *prowlarr.Client, qbitClient *qbit.Client, staticDir string) http.Handler {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
@@ -148,7 +158,7 @@ func buildRouter(database *db.DB, cfg *config.Config, tokenCfg auth.TokenConfig,
 
 	authHandler := auth.NewHandler(database, tokenCfg)
 	searchHandler := prowlarr.NewHandler(prowlarrClient)
-	requestsHandler := requests.New(database, prowlarrClient, qbitClient, cfg.DownloadDir, cfg.QBitCategory)
+	requestsHandler := requests.New(database, prowlarrClient, qbitClient, cfg.QBitCategory)
 
 	// Public — no JWT required.
 	r.Post("/api/auth/login", authHandler.Login)
@@ -165,6 +175,9 @@ func buildRouter(database *db.DB, cfg *config.Config, tokenCfg auth.TokenConfig,
 		r.Get("/api/requests", requestsHandler.List)
 		r.Get("/api/requests/{id}", requestsHandler.Get)
 	})
+
+	// Serve the frontend SPA for all non-API paths.
+	r.Handle("/*", spaHandler(staticDir))
 
 	return r
 }

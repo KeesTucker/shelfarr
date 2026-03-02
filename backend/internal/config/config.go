@@ -22,16 +22,15 @@ type Config struct {
 	QBitURL      string
 	QBitUsername string
 	QBitPassword string
-	DownloadDir  string
 	QBitCategory string
 
 	// Metadata sources
 	AudnexusURL string // optional; empty string disables Audnexus lookups
 
 	// Library
-	// WatchDir is the local path where Syncthing delivers completed files from
-	// the seedbox. Defaults to DOWNLOAD_DIR for non-Syncthing setups where
-	// qBit runs locally and files are accessible directly.
+	// WatchDir is the local path where completed files appear (either directly
+	// from qBit or delivered by Syncthing for remote seedbox setups). If empty,
+	// main resolves it from qBittorrent's configured save path at startup.
 	WatchDir   string
 	LibraryDir string
 	// WatchTimeout is the maximum time Move will poll WatchDir before giving up.
@@ -57,7 +56,8 @@ type Config struct {
 	ServiceToken string
 
 	// Server
-	Port string
+	Port      string
+	StaticDir string // directory to serve the frontend SPA from
 }
 
 // Load reads configuration from the environment. Returns an error if any
@@ -85,10 +85,9 @@ func Load() (*Config, error) {
 		QBitURL:           getenv("QBIT_URL", ""),
 		QBitUsername:      getenv("QBIT_USERNAME", "admin"),
 		QBitPassword:      getenv("QBIT_PASSWORD", ""),
-		DownloadDir:       getenv("DOWNLOAD_DIR", "/downloads/audiobooks"),
 		QBitCategory:      getenv("QBIT_CATEGORY", ""),
 		AudnexusURL:       getenv("AUDNEXUS_URL", ""),
-		WatchDir:          getenv("WATCH_DIR", getenv("DOWNLOAD_DIR", "/downloads/audiobooks")),
+		WatchDir:          getenv("WATCH_DIR", ""),
 		LibraryDir:        getenv("LIBRARY_DIR", "/audiobooks"),
 		WatchTimeout:      watchTimeout,
 		ABSURL:            getenv("ABS_URL", ""),
@@ -100,7 +99,8 @@ func Load() (*Config, error) {
 		AdminUsername:     getenv("ADMIN_USERNAME", "admin"),
 		AdminPassword:     getenv("ADMIN_PASSWORD", ""),
 		ServiceToken:      getenv("SERVICE_TOKEN", ""),
-		Port:              getenv("PORT", "8080"),
+		Port:              getenv("PORT", "8008"),
+		StaticDir:         getenv("STATIC_DIR", "/app/static"),
 	}, nil
 }
 
