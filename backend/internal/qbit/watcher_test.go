@@ -76,10 +76,13 @@ func seedDownloading(t *testing.T, d *db.DB, reqID, hash string) *db.Request {
 }
 
 // newTestWatcher returns a Watcher with the fake getter wired in.
+// The launch function is set to synchronous so that tests can assert on DB
+// state immediately after w.tick() returns, without goroutine races.
 func newTestWatcher(d *db.DB, fake *fakeTorrentGetter, onComplete OnComplete) *Watcher {
-	w := NewWatcher(d, nil, onComplete) // NewWatcher accepts *Client; we override below
+	w := NewWatcher(d, nil, onComplete, nil) // NewWatcher accepts *Client; we override below
 	w.client = fake
-	w.stallTimeout = time.Hour // use explicit value; tests override as needed
+	w.stallTimeout = time.Hour        // use explicit value; tests override as needed
+	w.launch = func(f func()) { f() } // synchronous so tests can check state immediately
 	return w
 }
 

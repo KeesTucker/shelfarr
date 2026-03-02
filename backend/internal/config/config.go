@@ -28,7 +28,13 @@ type Config struct {
 	AudnexusURL string // optional; empty string disables Audnexus lookups
 
 	// Library
+	// WatchDir is the local path where Syncthing delivers completed files from
+	// the seedbox. Defaults to QBIT_DOWNLOAD_DIR for non-Syncthing setups where
+	// qBit runs locally and files are accessible directly.
+	WatchDir   string
 	LibraryDir string
+	// WatchTimeout is the maximum time Move will poll WatchDir before giving up.
+	WatchTimeout time.Duration
 
 	// Audiobookshelf
 	ABSURL       string
@@ -66,6 +72,11 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("parse JWT_EXPIRY: %w", err)
 	}
 
+	watchTimeout, err := time.ParseDuration(getenv("WATCH_TIMEOUT", "24h"))
+	if err != nil {
+		return nil, fmt.Errorf("parse WATCH_TIMEOUT: %w", err)
+	}
+
 	return &Config{
 		DBPath:            getenv("DB_PATH", "/data/bookarr.db"),
 		ProwlarrURL:       getenv("PROWLARR_URL", ""),
@@ -75,7 +86,9 @@ func Load() (*Config, error) {
 		QBitPassword:      getenv("QBIT_PASSWORD", ""),
 		QBitDownloadDir:   getenv("QBIT_DOWNLOAD_DIR", "/downloads/audiobooks"),
 		AudnexusURL:       getenv("AUDNEXUS_URL", ""),
+		WatchDir:          getenv("WATCH_DIR", getenv("QBIT_DOWNLOAD_DIR", "/downloads/audiobooks")),
 		LibraryDir:        getenv("LIBRARY_DIR", "/audiobooks"),
+		WatchTimeout:      watchTimeout,
 		ABSURL:            getenv("ABS_URL", ""),
 		ABSAPIKey:         getenv("ABS_API_KEY", ""),
 		ABSLibraryID:      getenv("ABS_LIBRARY_ID", ""),

@@ -16,6 +16,8 @@ import (
 	"bookarr/internal/auth"
 	"bookarr/internal/config"
 	"bookarr/internal/db"
+	"bookarr/internal/discord"
+	"bookarr/internal/library"
 	"bookarr/internal/metadata"
 	"bookarr/internal/prowlarr"
 	"bookarr/internal/qbit"
@@ -68,10 +70,21 @@ func run() error {
 		}
 	}()
 
-	// Start the download watcher with step-6 metadata resolution.
-	// Step 7 (file move, ABS rescan, Discord) extends this closure.
 	metaClient := metadata.New(cfg.AudnexusURL)
-	watcher := qbit.NewWatcher(database, qbitClient, func(ctx context.Context, req *db.Request, _ *qbit.TorrentInfo) error {
+	mover := library.New(cfg.WatchDir, cfg.LibraryDir, cfg.WatchTimeout)
+
+	// lookupUsername returns the username for a user ID, falling back to the
+	// raw ID if the DB lookup fails (e.g. user deleted between request and completion).
+	lookupUsername := func(ctx context.Context, userID string) string {
+		u, err := database.GetUserByID(ctx, userID)
+		if err != nil {
+			return userID
+		}
+		return u.Username
+	}
+
+	onComplete := func(ctx context.Context, req *db.Request, info *qbit.TorrentInfo) error {
+		// 1. Resolve and persist metadata.
 		book := metaClient.Resolve(ctx, req.Title, req.Author)
 		metaJSON, err := book.JSON()
 		if err != nil {
@@ -88,8 +101,33 @@ func run() error {
 			"narrator", book.Narrator,
 			"series", book.Series,
 		)
+
+		// 2. Wait for the file to appear in the watch dir (Syncthing may delay
+		// delivery after qBit reports seeding), then move to the library.
+		finalPath, err := mover.Move(ctx, info.Name, book)
+		if err != nil {
+			return fmt.Errorf("move files: %w", err)
+		}
+		if err := database.UpdateRequestStatus(ctx, req.ID, db.StatusMoving, db.WithFinalPath(finalPath)); err != nil {
+			slog.Warn("persist final path", "request_id", req.ID, "err", err)
+		}
+
+		// 3. Discord success notification (best-effort).
+		if err := discord.NotifyComplete(ctx, cfg.DiscordWebhookURL, book,
+			lookupUsername(ctx, req.UserID), finalPath); err != nil {
+			slog.Warn("discord notify complete", "request_id", req.ID, "err", err)
+		}
 		return nil
-	})
+	}
+
+	onFail := func(ctx context.Context, req *db.Request, reason string) {
+		if err := discord.NotifyFailed(ctx, cfg.DiscordWebhookURL,
+			req.Title, req.Author, lookupUsername(ctx, req.UserID), reason); err != nil {
+			slog.Warn("discord notify failed", "request_id", req.ID, "err", err)
+		}
+	}
+
+	watcher := qbit.NewWatcher(database, qbitClient, onComplete, onFail)
 	watcher.Start(ctx)
 
 	r := buildRouter(database, cfg, tokenCfg, prowlarrClient, qbitClient)

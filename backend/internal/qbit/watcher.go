@@ -17,8 +17,13 @@ const (
 // OnComplete is called when a torrent finishes downloading (progress ≥ 1.0).
 // It runs with the request already in status "moving". Returning a non-nil
 // error causes the request to be marked as failed with that error message.
-// Steps 6 and 7 (metadata, file move, ABS rescan, Discord) are wired here.
+// Steps 6 and 7 (metadata, file move, Discord) are wired here.
 type OnComplete func(ctx context.Context, req *db.Request, info *TorrentInfo) error
+
+// OnFail is called when a request transitions to "failed" status, either
+// because qBit reported an error/stall or because OnComplete returned an error.
+// It is best-effort: errors from OnFail are logged but do not change behaviour.
+type OnFail func(ctx context.Context, req *db.Request, reason string)
 
 // torrentGetter is the subset of *Client used by the watcher. The narrow
 // interface allows tests to substitute a lightweight fake.
@@ -33,13 +38,19 @@ type Watcher struct {
 	db           *db.DB
 	client       torrentGetter
 	onComplete   OnComplete
+	onFail       OnFail
 	interval     time.Duration
 	stallTimeout time.Duration
+	// launch runs the completion handler. Defaults to a goroutine so that a
+	// slow onComplete (e.g. waiting for Syncthing) does not block polling of
+	// other active downloads. Tests override this to run synchronously.
+	launch func(f func())
 }
 
 // NewWatcher creates a Watcher. Pass nil for onComplete to simply mark
-// completed downloads as done with no additional processing.
-func NewWatcher(database *db.DB, client *Client, onComplete OnComplete) *Watcher {
+// completed downloads as done with no additional processing. Pass nil for
+// onFail to skip failure notifications.
+func NewWatcher(database *db.DB, client *Client, onComplete OnComplete, onFail OnFail) *Watcher {
 	if onComplete == nil {
 		onComplete = func(_ context.Context, _ *db.Request, _ *TorrentInfo) error {
 			return nil
@@ -49,8 +60,10 @@ func NewWatcher(database *db.DB, client *Client, onComplete OnComplete) *Watcher
 		db:           database,
 		client:       client,
 		onComplete:   onComplete,
+		onFail:       onFail,
 		interval:     defaultWatchInterval,
 		stallTimeout: defaultStallTimeout,
+		launch:       func(f func()) { go f() },
 	}
 }
 
@@ -206,18 +219,25 @@ func (w *Watcher) handleComplete(ctx context.Context, requestID, hash string, in
 		return
 	}
 
-	if err := w.onComplete(ctx, req, info); err != nil {
-		slog.Error("watcher: completion handler failed", "request_id", requestID, "err", err)
-		_ = w.db.UpdateRequestStatus(ctx, requestID, db.StatusFailed,
-			db.WithError(err.Error()))
-		return
-	}
-
-	if err := w.db.UpdateRequestStatus(ctx, requestID, db.StatusDone); err != nil {
-		slog.Error("watcher: set status done", "request_id", requestID, "err", err)
-		return
-	}
-	slog.Info("watcher: request done", "request_id", requestID)
+	// Run the completion handler via w.launch. In production this is a goroutine
+	// so a slow onComplete (e.g. waiting for Syncthing sync) does not block the
+	// watcher from polling other active downloads. Tests use a synchronous runner.
+	w.launch(func() {
+		if err := w.onComplete(ctx, req, info); err != nil {
+			slog.Error("watcher: completion handler failed", "request_id", requestID, "err", err)
+			_ = w.db.UpdateRequestStatus(ctx, requestID, db.StatusFailed,
+				db.WithError(err.Error()))
+			if w.onFail != nil {
+				w.onFail(ctx, req, err.Error())
+			}
+			return
+		}
+		if err := w.db.UpdateRequestStatus(ctx, requestID, db.StatusDone); err != nil {
+			slog.Error("watcher: set status done", "request_id", requestID, "err", err)
+			return
+		}
+		slog.Info("watcher: request done", "request_id", requestID)
+	})
 }
 
 func (w *Watcher) markFailed(ctx context.Context, requestID, hash, reason string, watched map[string]*watchEntry) {
@@ -225,5 +245,13 @@ func (w *Watcher) markFailed(ctx context.Context, requestID, hash, reason string
 	delete(watched, hash)
 	if err := w.db.UpdateRequestStatus(ctx, requestID, db.StatusFailed, db.WithError(reason)); err != nil {
 		slog.Error("watcher: update failed status", "request_id", requestID, "err", err)
+	}
+	if w.onFail != nil {
+		req, err := w.db.GetRequest(ctx, requestID)
+		if err != nil {
+			slog.Warn("watcher: load request for onFail", "request_id", requestID, "err", err)
+			return
+		}
+		w.onFail(ctx, req, reason)
 	}
 }
