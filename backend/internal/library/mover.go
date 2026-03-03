@@ -43,8 +43,9 @@ func New(watchDir, libraryDir string, timeout time.Duration) *Mover {
 }
 
 // Move waits for torrentName to appear in the watch directory (with no active
-// Syncthing temp files), then moves it to libraryDir/<Author>/<Title> (Year)/.
-// Returns the absolute path of the moved content.
+// Syncthing temp files), then links all files it contains (flattened, no
+// subdirectory nesting) into libraryDir/<Author>/<Title> (Year)/.
+// Returns the absolute path of that destination directory.
 func (m *Mover) Move(ctx context.Context, torrentName string, book *metadata.Book) (string, error) {
 	src := filepath.Join(m.watchDir, torrentName)
 	slog.Info("library: waiting for file in watch dir", "path", src)
@@ -58,15 +59,14 @@ func (m *Mover) Move(ctx context.Context, torrentName string, book *metadata.Boo
 		return "", fmt.Errorf("library: create dest dir: %w", err)
 	}
 
-	dest := filepath.Join(destDir, filepath.Base(src))
-	slog.Info("library: linking files", "src", src, "dest", dest)
+	slog.Info("library: linking files", "src", src, "dest", destDir)
 
-	if err := linkAll(src, dest); err != nil {
+	if err := linkFlat(src, destDir); err != nil {
 		return "", fmt.Errorf("library: link: %w", err)
 	}
 
-	slog.Info("library: link complete", "dest", dest)
-	return dest, nil
+	slog.Info("library: link complete", "dest", destDir)
+	return destDir, nil
 }
 
 // waitForFile polls path every pollInterval until:
@@ -169,34 +169,47 @@ func sanitizeName(s string) string {
 
 // ── file operations ───────────────────────────────────────────────────────────
 
-// linkAll hard-links src to dst without removing the source. For files it
-// tries os.Link first (instant, same device); on failure it falls back to
-// copyFile. For directories it recurses, preserving structure.
-func linkAll(src, dst string) error {
+// linkFlat links every regular file under src directly into dst, stripping all
+// subdirectory nesting. dst must already exist. For each file it tries
+// os.Link first (instant, same-device hard link) and falls back to copyFile.
+// Duplicate filenames (same base name from different subdirs) are skipped with
+// a warning rather than overwriting.
+func linkFlat(src, dst string) error {
 	info, err := os.Stat(src)
 	if err != nil {
 		return err
 	}
-	if info.IsDir() {
-		if err := os.MkdirAll(dst, info.Mode()); err != nil {
-			return err
-		}
-		entries, err := os.ReadDir(src)
-		if err != nil {
-			return err
-		}
-		for _, e := range entries {
-			if err := linkAll(filepath.Join(src, e.Name()), filepath.Join(dst, e.Name())); err != nil {
-				return err
-			}
-		}
-		return nil
+	if !info.IsDir() {
+		// Single-file torrent: link directly into dst.
+		return linkOneFile(src, filepath.Join(dst, filepath.Base(src)), info.Mode())
 	}
-	// Single file: hard link if possible, copy otherwise.
+	return filepath.WalkDir(src, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return nil // skip unreadable entries
+		}
+		if d.IsDir() {
+			return nil
+		}
+		fi, err := d.Info()
+		if err != nil {
+			return nil
+		}
+		target := filepath.Join(dst, d.Name())
+		if _, statErr := os.Stat(target); statErr == nil {
+			slog.Warn("library: skipping duplicate filename", "file", d.Name(), "src", path)
+			return nil
+		}
+		return linkOneFile(path, target, fi.Mode())
+	})
+}
+
+// linkOneFile hard-links src to dst, falling back to copyFile on failure
+// (e.g. cross-device).
+func linkOneFile(src, dst string, mode os.FileMode) error {
 	if err := os.Link(src, dst); err == nil {
 		return nil
 	}
-	return copyFile(src, dst, info.Mode())
+	return copyFile(src, dst, mode)
 }
 
 // copyAll recursively copies src to dst, preserving file modes.

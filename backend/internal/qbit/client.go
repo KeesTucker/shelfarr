@@ -59,6 +59,11 @@ func (c *Client) SetAutoTMM(enabled bool) {
 	c.autoTMM = enabled
 }
 
+// AutoTMM reports whether Automatic Torrent Management is enabled.
+func (c *Client) AutoTMM() bool {
+	return c.autoTMM
+}
+
 // New creates a qBittorrent client. baseURL must not have a trailing slash.
 func New(baseURL, username, password string) *Client {
 	return &Client{

@@ -190,6 +190,88 @@ func TestIsReady_NonSyncthingDotFile(t *testing.T) {
 	}
 }
 
+// ── linkFlat ──────────────────────────────────────────────────────────────────
+
+func TestLinkFlat_NestedDirs(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "book")
+	dst := filepath.Join(dir, "dest")
+	if err := os.MkdirAll(filepath.Join(src, "disc1"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(src, "disc2"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(dst, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{
+		"disc1/ch01.mp3": "audio1",
+		"disc1/ch02.mp3": "audio2",
+		"disc2/ch03.mp3": "audio3",
+		"cover.jpg":      "image",
+	}
+	for rel, content := range files {
+		if err := os.WriteFile(filepath.Join(src, rel), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := linkFlat(src, dst); err != nil {
+		t.Fatalf("linkFlat: %v", err)
+	}
+
+	// All files should be directly in dst with no subdirectories.
+	want := []string{"ch01.mp3", "ch02.mp3", "ch03.mp3", "cover.jpg"}
+	for _, name := range want {
+		if _, err := os.Stat(filepath.Join(dst, name)); err != nil {
+			t.Errorf("expected %q directly in dest: %v", name, err)
+		}
+	}
+	// No subdirs should exist in dst.
+	entries, _ := os.ReadDir(dst)
+	for _, e := range entries {
+		if e.IsDir() {
+			t.Errorf("unexpected subdirectory %q in dest", e.Name())
+		}
+	}
+}
+
+func TestLinkFlat_DuplicateNameSkipped(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "book")
+	dst := filepath.Join(dir, "dest")
+	if err := os.MkdirAll(filepath.Join(src, "disc1"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(src, "disc2"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(dst, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Same filename in two different subdirs.
+	if err := os.WriteFile(filepath.Join(src, "disc1", "cover.jpg"), []byte("first"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(src, "disc2", "cover.jpg"), []byte("second"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := linkFlat(src, dst); err != nil {
+		t.Fatalf("linkFlat with duplicate: %v", err)
+	}
+
+	// First one wins; file must exist.
+	got, err := os.ReadFile(filepath.Join(dst, "cover.jpg"))
+	if err != nil {
+		t.Fatalf("cover.jpg missing: %v", err)
+	}
+	if string(got) != "first" {
+		t.Errorf("cover.jpg content=%q; want %q", got, "first")
+	}
+}
+
 // ── copyAll ───────────────────────────────────────────────────────────────────
 
 func TestCopyAll_File(t *testing.T) {
@@ -278,12 +360,12 @@ func TestMove_HappyPath(t *testing.T) {
 		t.Fatalf("Move: %v", err)
 	}
 
-	// Destination should be Author/Title (Year)/torrentName.
-	wantPath := filepath.Join(libDir, "Brandon Sanderson", "The Final Empire (2006)", torrentName)
+	// Destination is the Author/Title (Year) dir; files are flattened into it.
+	wantPath := filepath.Join(libDir, "Brandon Sanderson", "The Final Empire (2006)")
 	if finalPath != wantPath {
 		t.Errorf("finalPath=%q; want %q", finalPath, wantPath)
 	}
-	// Files at destination.
+	// File should be directly in destDir, not inside a sub-folder.
 	if _, err := os.Stat(filepath.Join(finalPath, "ch1.mp3")); err != nil {
 		t.Errorf("ch1.mp3 not at destination: %v", err)
 	}
@@ -397,11 +479,11 @@ func TestMove_SingleFileTorrent(t *testing.T) {
 		t.Fatalf("Move single file: %v", err)
 	}
 
-	wantPath := filepath.Join(libDir, "Frank Herbert", "Dune (1965)", torrentName)
+	wantPath := filepath.Join(libDir, "Frank Herbert", "Dune (1965)")
 	if finalPath != wantPath {
 		t.Errorf("finalPath=%q; want %q", finalPath, wantPath)
 	}
-	if _, err := os.Stat(finalPath); err != nil {
+	if _, err := os.Stat(filepath.Join(finalPath, torrentName)); err != nil {
 		t.Errorf("file not at destination: %v", err)
 	}
 }
