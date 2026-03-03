@@ -53,7 +53,7 @@ type Client struct {
 }
 
 // SetAutoTMM enables Automatic Torrent Management. When enabled, torrents are
-// added with useAutoTMM=true and qBittorrent uses its category-based save path
+// added with autoTMM=true and qBittorrent uses its category-based save path
 // rules, ignoring any savepath passed to AddTorrent.
 func (c *Client) SetAutoTMM(enabled bool) {
 	c.autoTMM = enabled
@@ -188,7 +188,7 @@ func (c *Client) postTorrent(ctx context.Context, downloadURL, savePath, categor
 		form := url.Values{}
 		form.Set("urls", downloadURL)
 		if c.autoTMM {
-			form.Set("useAutoTMM", "true")
+			form.Set("autoTMM", "true")
 		} else {
 			form.Set("savepath", savePath)
 		}
@@ -252,8 +252,8 @@ func (c *Client) fetchAndPostTorrent(ctx context.Context, downloadURL, savePath,
 		return fmt.Errorf("qbit upload torrent: write bytes: %w", err)
 	}
 	if c.autoTMM {
-		if err := mw.WriteField("useAutoTMM", "true"); err != nil {
-			return fmt.Errorf("qbit upload torrent: write useAutoTMM: %w", err)
+		if err := mw.WriteField("autoTMM", "true"); err != nil {
+			return fmt.Errorf("qbit upload torrent: write autoTMM: %w", err)
 		}
 	} else {
 		if err := mw.WriteField("savepath", savePath); err != nil {
