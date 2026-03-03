@@ -28,9 +28,6 @@ services:
       WATCH_DIR: /downloads/audiobooks
       WATCH_TIMEOUT: 24h
 
-      # ── Metadata ──────────────────────────────────────────────────────────
-      # AUDNEXUS_URL: http://localhost:[audnexus-port]
-
       # ── AudioBookShelf ────────────────────────────────────────────────────
       ABS_URL: ${ABS_URL:-http://audiobookshelf:13378}
 
