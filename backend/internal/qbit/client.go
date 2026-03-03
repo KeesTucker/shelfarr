@@ -119,7 +119,7 @@ func (c *Client) GetTorrent(ctx context.Context, hash string) (*TorrentInfo, err
 	if err != nil {
 		return nil, fmt.Errorf("qbit get torrent: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("qbit get torrent: unexpected status %d", resp.StatusCode)
@@ -151,7 +151,7 @@ func (c *Client) GetDefaultSavePath(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("qbit get preferences: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("qbit get preferences: unexpected status %d", resp.StatusCode)
@@ -211,7 +211,7 @@ func (c *Client) fetchAndPostTorrent(ctx context.Context, downloadURL, savePath,
 	if err != nil {
 		return fmt.Errorf("qbit fetch torrent: build request: %w", err)
 	}
-	fetchResp, err := c.http.Do(fetchReq)
+	fetchResp, err := c.http.Do(fetchReq) //nolint:gosec
 	if err != nil {
 		return fmt.Errorf("qbit fetch torrent: %w", err)
 	}
@@ -327,7 +327,7 @@ func (c *Client) doWithAuth(ctx context.Context, makeReq func() (*http.Request, 
 	}
 	c.injectCookie(req)
 
-	resp, err := c.http.Do(req)
+	resp, err := c.http.Do(req) //nolint:gosec
 	if err != nil {
 		return nil, err
 	}

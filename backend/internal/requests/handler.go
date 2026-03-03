@@ -200,7 +200,7 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 			respond.Error(w, http.StatusNotFound, "request not found")
 			return
 		}
-		slog.Error("get request", "id", id, "err", err)
+		slog.Error("get request", "id", id, "err", err) //nolint:gosec
 		respond.Error(w, http.StatusInternalServerError, "failed to get request")
 		return
 	}
@@ -294,7 +294,7 @@ func (h *Handler) Import(w http.ResponseWriter, r *http.Request) {
 		Status:      db.StatusMoving,
 	}
 	if err := h.db.CreateRequest(r.Context(), req); err != nil {
-		slog.Error("import: create request", "user_id", claims.UserID, "err", err)
+		slog.Error("import: create request", "user_id", claims.UserID, "err", err) //nolint:gosec
 		respond.Error(w, http.StatusInternalServerError, "failed to save request")
 		return
 	}

@@ -84,11 +84,11 @@ func (c *Client) Search(ctx context.Context, query string) ([]Release, error) {
 	q.Set("apikey", c.apiKey)
 	req.URL.RawQuery = q.Encode()
 
-	resp, err := c.http.Do(req)
+	resp, err := c.http.Do(req) //nolint:gosec
 	if err != nil {
 		return nil, fmt.Errorf("prowlarr search: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("prowlarr search: unexpected status %d", resp.StatusCode)

@@ -227,7 +227,9 @@ func copyFile(src, dst string, mode os.FileMode) error {
 		return err
 	}
 	if _, err := io.Copy(out, in); err != nil {
-		_ = out.Close()
+		if cerr := out.Close(); cerr != nil {
+			slog.Warn("library: close dest file after copy error", "dst", dst, "err", cerr)
+		}
 		return err
 	}
 	return out.Close()
