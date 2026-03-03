@@ -192,7 +192,7 @@ func (c *Client) postTorrent(ctx context.Context, downloadURL, savePath, categor
 	if err != nil {
 		return fmt.Errorf("qbit add torrent: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK || strings.TrimSpace(string(body)) != "Ok." {
@@ -305,7 +305,7 @@ func (c *Client) listAll(ctx context.Context) ([]TorrentInfo, error) {
 	if err != nil {
 		return nil, fmt.Errorf("qbit list torrents: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	var torrents []TorrentInfo
 	if err := json.NewDecoder(resp.Body).Decode(&torrents); err != nil {
@@ -333,7 +333,7 @@ func (c *Client) doWithAuth(ctx context.Context, makeReq func() (*http.Request, 
 	}
 
 	if resp.StatusCode == http.StatusForbidden {
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		// Session expired — re-login and retry once.
 		if err := c.login(ctx); err != nil {
 			return nil, err
@@ -343,7 +343,7 @@ func (c *Client) doWithAuth(ctx context.Context, makeReq func() (*http.Request, 
 			return nil, err
 		}
 		c.injectCookie(req)
-		return c.http.Do(req)
+		return c.http.Do(req) //nolint:gosec
 	}
 
 	return resp, nil
@@ -382,11 +382,11 @@ func (c *Client) login(ctx context.Context) error {
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-	resp, err := c.http.Do(req)
+	resp, err := c.http.Do(req) //nolint:gosec
 	if err != nil {
 		return fmt.Errorf("qbit login: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, _ := io.ReadAll(resp.Body)
 	if strings.TrimSpace(string(body)) != "Ok." {
