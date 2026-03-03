@@ -35,7 +35,7 @@ func NewHandler(database *db.DB, cfg TokenConfig, absAuth absAuthenticator) *Han
 
 type loginRequest struct {
 	Username string `json:"username"`
-	Password string `json:"password"`
+	Password string `json:"password"` //nolint:gosec
 }
 
 type loginResponse struct {

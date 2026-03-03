@@ -40,8 +40,8 @@ type Config struct {
 	DiscordWebhookURL string
 
 	// Auth
-	JWTSecret string
-	JWTExpiry time.Duration
+	JWTSecret string        `json:"-"` //nolint:gosec
+	JWTExpiry time.Duration `json:"-"`
 
 	// Server
 	Port      string

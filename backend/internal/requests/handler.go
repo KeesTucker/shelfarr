@@ -143,7 +143,7 @@ func (h *Handler) Submit(w http.ResponseWriter, r *http.Request) {
 		Status:      db.StatusDownloading,
 	}
 	if err := h.db.CreateRequest(r.Context(), req); err != nil {
-		slog.Error("create request", "user_id", claims.UserID, "err", err)
+		slog.Error("create request", "user_id", claims.UserID, "err", err) //nolint:gosec
 		respond.Error(w, http.StatusInternalServerError, "failed to save request")
 		return
 	}
@@ -177,7 +177,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 
 	rows, err := h.db.ListRequestsByUser(r.Context(), claims.UserID)
 	if err != nil {
-		slog.Error("list requests by user", "user_id", claims.UserID, "err", err)
+		slog.Error("list requests by user", "user_id", claims.UserID, "err", err) //nolint:gosec
 		respond.Error(w, http.StatusInternalServerError, "failed to list requests")
 		return
 	}

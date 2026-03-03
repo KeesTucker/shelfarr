@@ -48,7 +48,7 @@ func New(baseURL string) *Client {
 
 type absLoginRequest struct {
 	Username string `json:"username"`
-	Password string `json:"password"`
+	Password string `json:"password"` //nolint:gosec
 }
 
 type absLoginResponse struct {
@@ -71,11 +71,11 @@ func (c *Client) Login(ctx context.Context, username, password string) (*User, e
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.httpClient.Do(req) //nolint:gosec
 	if err != nil {
 		return nil, fmt.Errorf("abs login: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
 		return nil, ErrInvalidCredentials

@@ -215,7 +215,7 @@ func (c *Client) fetchAndPostTorrent(ctx context.Context, downloadURL, savePath,
 	if err != nil {
 		return fmt.Errorf("qbit fetch torrent: %w", err)
 	}
-	defer fetchResp.Body.Close()
+	defer func() { _ = fetchResp.Body.Close() }()
 	if fetchResp.StatusCode != http.StatusOK {
 		return fmt.Errorf("qbit fetch torrent: status %d", fetchResp.StatusCode)
 	}
@@ -242,7 +242,9 @@ func (c *Client) fetchAndPostTorrent(ctx context.Context, downloadURL, savePath,
 			return fmt.Errorf("qbit upload torrent: write category: %w", err)
 		}
 	}
-	mw.Close()
+	if err := mw.Close(); err != nil {
+		return fmt.Errorf("qbit upload torrent: close multipart writer: %w", err)
+	}
 
 	ct := mw.FormDataContentType()
 	makeReq := func() (*http.Request, error) {
@@ -260,7 +262,7 @@ func (c *Client) fetchAndPostTorrent(ctx context.Context, downloadURL, savePath,
 	if err != nil {
 		return fmt.Errorf("qbit upload torrent: %w", err)
 	}
-	defer addResp.Body.Close()
+	defer func() { _ = addResp.Body.Close() }()
 	body, _ := io.ReadAll(addResp.Body)
 	if addResp.StatusCode != http.StatusOK || strings.TrimSpace(string(body)) != "Ok." {
 		return fmt.Errorf("qbit upload torrent: unexpected response %d %q", addResp.StatusCode, string(body))

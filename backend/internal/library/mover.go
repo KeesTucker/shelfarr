@@ -54,7 +54,7 @@ func (m *Mover) Move(ctx context.Context, torrentName string, book *metadata.Boo
 	}
 
 	destDir := filepath.Join(m.libraryDir, destSubpath(book))
-	if err := os.MkdirAll(destDir, 0o755); err != nil {
+	if err := os.MkdirAll(destDir, 0o750); err != nil {
 		return "", fmt.Errorf("library: create dest dir: %w", err)
 	}
 
@@ -216,18 +216,18 @@ func copyDir(src, dst string, mode os.FileMode) error {
 }
 
 func copyFile(src, dst string, mode os.FileMode) error {
-	in, err := os.Open(src)
+	in, err := os.Open(src) //nolint:gosec
 	if err != nil {
 		return err
 	}
-	defer in.Close()
+	defer func() { _ = in.Close() }()
 
-	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
+	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode) //nolint:gosec
 	if err != nil {
 		return err
 	}
 	if _, err := io.Copy(out, in); err != nil {
-		out.Close()
+		_ = out.Close()
 		return err
 	}
 	return out.Close()

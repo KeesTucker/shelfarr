@@ -190,7 +190,7 @@ func (db *DB) ListAllRequestsWithUser(ctx context.Context) ([]*RequestWithUser, 
 	if err != nil {
 		return nil, fmt.Errorf("list all requests with user: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var result []*RequestWithUser
 	for rows.Next() {
@@ -220,7 +220,7 @@ func (db *DB) ListTorrentNames(ctx context.Context) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("list torrent names: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var names []string
 	for rows.Next() {
 		var name string
@@ -273,7 +273,7 @@ func scanRequest(row *sql.Row) (*Request, error) {
 }
 
 func scanRequests(rows *sql.Rows) ([]*Request, error) {
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var result []*Request
 	for rows.Next() {
 		var r Request

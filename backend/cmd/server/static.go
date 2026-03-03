@@ -22,7 +22,7 @@ func spaHandler(dir string) http.Handler {
 				return
 			}
 		} else {
-			f.Close()
+			_ = f.Close()
 		}
 		fileServer.ServeHTTP(w, r)
 	})

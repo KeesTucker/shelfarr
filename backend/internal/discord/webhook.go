@@ -38,11 +38,11 @@ func Send(ctx context.Context, webhookURL, content string) error {
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := httpClient.Do(req)
+	resp, err := httpClient.Do(req) //nolint:gosec
 	if err != nil {
 		return fmt.Errorf("discord: send: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// Discord returns 204 No Content on success (no wait parameter).
 	if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusOK {

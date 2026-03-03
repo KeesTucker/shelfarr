@@ -42,7 +42,11 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("open database: %w", err)
 	}
-	defer database.Close()
+	defer func() {
+		if err := database.Close(); err != nil {
+			slog.Error("close database", "err", err)
+		}
+	}()
 
 	tokenCfg := auth.TokenConfig{
 		Secret: []byte(cfg.JWTSecret),
@@ -145,7 +149,7 @@ func run() error {
 	requestsHandler := requests.New(database, prowlarrClient, qbitClient, cfg.QBitCategory)
 	requestsHandler.SetImportConfig(watchDir, onImportFn, onFail)
 
-	r := buildRouter(database, cfg, tokenCfg, absClient, prowlarrClient, requestsHandler, cfg.StaticDir)
+	r := buildRouter(database, tokenCfg, absClient, prowlarrClient, requestsHandler, cfg.StaticDir)
 
 	slog.Info("server listening", "port", cfg.Port)
 	srv := &http.Server{
@@ -160,7 +164,7 @@ func run() error {
 
 // buildRouter wires all routes. Auth-protected routes are added in a sub-router
 // that applies the Authenticate middleware.
-func buildRouter(database *db.DB, cfg *config.Config, tokenCfg auth.TokenConfig, absClient *abs.Client, prowlarrClient *prowlarr.Client, requestsHandler *requests.Handler, staticDir string) http.Handler {
+func buildRouter(database *db.DB, tokenCfg auth.TokenConfig, absClient *abs.Client, prowlarrClient *prowlarr.Client, requestsHandler *requests.Handler, staticDir string) http.Handler {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)

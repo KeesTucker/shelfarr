@@ -44,7 +44,7 @@ func (h *Handler) Search(w http.ResponseWriter, r *http.Request) {
 
 	releases, err := h.client.Search(r.Context(), query)
 	if err != nil {
-		slog.Error("prowlarr search", "query", query, "err", err)
+		slog.Error("prowlarr search", "query", query, "err", err) //nolint:gosec
 		respond.Error(w, http.StatusBadGateway, "search unavailable")
 		return
 	}

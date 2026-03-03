@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 )
@@ -18,8 +19,8 @@ var migrations = []migration{
 
 // migrate ensures the schema_migrations table exists, then applies any
 // migrations that have not yet been recorded, each in its own transaction.
-func (db *DB) migrate() error {
-	if _, err := db.Exec(`
+func (db *DB) migrate(ctx context.Context) error {
+	if _, err := db.ExecContext(ctx, `
 		CREATE TABLE IF NOT EXISTS schema_migrations (
 			version    INTEGER PRIMARY KEY,
 			applied_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -30,7 +31,7 @@ func (db *DB) migrate() error {
 
 	for _, m := range migrations {
 		var applied int
-		if err := db.QueryRow(
+		if err := db.QueryRowContext(ctx,
 			`SELECT COUNT(*) FROM schema_migrations WHERE version = ?`, m.version,
 		).Scan(&applied); err != nil {
 			return fmt.Errorf("check migration %d: %w", m.version, err)
@@ -39,17 +40,17 @@ func (db *DB) migrate() error {
 			continue
 		}
 
-		tx, err := db.Begin()
+		tx, err := db.BeginTx(ctx, nil)
 		if err != nil {
 			return fmt.Errorf("begin migration %d: %w", m.version, err)
 		}
 
-		if _, err := tx.Exec(m.sql); err != nil {
+		if _, err := tx.ExecContext(ctx, m.sql); err != nil {
 			_ = tx.Rollback()
 			return fmt.Errorf("apply migration %d: %w", m.version, err)
 		}
 
-		if _, err := tx.Exec(
+		if _, err := tx.ExecContext(ctx,
 			`INSERT INTO schema_migrations (version) VALUES (?)`, m.version,
 		); err != nil {
 			_ = tx.Rollback()

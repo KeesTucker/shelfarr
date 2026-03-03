@@ -34,7 +34,7 @@ func Open(dsn string) (*DB, error) {
 	}
 
 	db := &DB{sqlDB}
-	if err := db.migrate(); err != nil {
+	if err := db.migrate(context.Background()); err != nil {
 		_ = sqlDB.Close()
 		return nil, fmt.Errorf("run migrations: %w", err)
 	}

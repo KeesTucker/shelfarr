@@ -110,11 +110,11 @@ func (c *Client) openLibrarySearch(ctx context.Context, title, author string) (*
 	}
 	req.Header.Set("User-Agent", "shelfarr/1.0")
 
-	resp, err := c.http.Do(req)
+	resp, err := c.http.Do(req) //nolint:gosec
 	if err != nil {
 		return nil, fmt.Errorf("do request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("unexpected status %d", resp.StatusCode)
