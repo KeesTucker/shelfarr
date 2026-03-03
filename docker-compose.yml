@@ -1,6 +1,7 @@
 services:
   shelfarr:
-    build: .
+    image: ghcr.io/keestucker/shelfarr:latest
+    # build: .  # uncomment to build from source instead
     ports:
       - "8008:8008"
     volumes:

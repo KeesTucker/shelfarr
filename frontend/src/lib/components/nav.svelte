@@ -16,12 +16,12 @@
 		<!-- Right side -->
 		<div class="flex items-center gap-3">
 			<Button
-				variant={$page.url.pathname === '/' ? 'secondary' : 'ghost'}
+				variant={$page.url.pathname === '/' ? 'default' : 'ghost'}
 				size="sm"
 				onclick={() => goto('/')}
 			>Search</Button>
 			<Button
-				variant={$page.url.pathname === '/requests' ? 'secondary' : 'ghost'}
+				variant={$page.url.pathname === '/requests' ? 'default' : 'ghost'}
 				size="sm"
 				onclick={() => goto('/requests')}
 			>{authStore.isAdmin ? 'All Requests' : 'My Requests'}</Button>
