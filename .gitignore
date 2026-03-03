@@ -2,7 +2,7 @@
 .idea/
 /backend/.run/*
 /backend/temp/*
-/backend/server.exe
+*.exe
 /frontend/.svelte-kit/*
 /frontend/dist/
 node_modules/
