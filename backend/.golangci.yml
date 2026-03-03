@@ -1,19 +1,18 @@
+version: "2"
+
 linters:
   enable:
     - errcheck
-    - gosimple
     - govet
     - ineffassign
     - staticcheck
-    - unused
     - gosec
     - bodyclose
     - noctx
-
-issues:
-  exclude-rules:
-    # Relax linting in test files — w.Write errors and security checks are noise there.
-    - path: _test\.go
-      linters:
-        - gosec
-        - errcheck
+  exclusions:
+    rules:
+      # Relax linting in test files — w.Write errors and security checks are noise there.
+      - path: _test\.go
+        linters:
+          - gosec
+          - errcheck
