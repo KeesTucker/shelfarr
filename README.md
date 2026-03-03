@@ -8,6 +8,8 @@ eventually this will be properly looked over and built without ai, I just wanted
 
 I am a little concerned with how well it's gone so far.
 
+I do not endorse using this for piracy.
+
 
 stack:
 - backend; go, sqlite
