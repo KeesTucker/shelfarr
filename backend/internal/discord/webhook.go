@@ -10,7 +10,7 @@ import (
 	"net/http"
 	"time"
 
-	"bookarr/internal/metadata"
+	"shelfarr/internal/metadata"
 )
 
 var httpClient = &http.Client{Timeout: 10 * time.Second}
@@ -54,13 +54,9 @@ func Send(ctx context.Context, webhookURL, content string) error {
 // NotifyComplete sends a download-complete notification with book metadata,
 // the requesting username, and the final library path.
 func NotifyComplete(ctx context.Context, webhookURL string, book *metadata.Book, requestedBy, finalPath string) error {
-	narrator := ""
-	if book.Narrator != "" {
-		narrator = "\nNarrator: " + book.Narrator
-	}
 	msg := fmt.Sprintf(
-		"📚 Download complete: **%s** by %s%s\nRequested by: %s\nSaved to: %s",
-		book.Title, book.Author, narrator, requestedBy, finalPath,
+		"📚 Download complete: **%s** by %s\nRequested by: %s\nSaved to: %s",
+		book.Title, book.Author, requestedBy, finalPath,
 	)
 	return Send(ctx, webhookURL, msg)
 }

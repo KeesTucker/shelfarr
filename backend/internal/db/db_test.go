@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"bookarr/internal/db"
+	"shelfarr/internal/db"
 )
 
 // openTestDB returns an in-memory SQLite DB with migrations applied.

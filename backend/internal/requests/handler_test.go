@@ -2,10 +2,12 @@ package requests_test
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -13,11 +15,11 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
-	"bookarr/internal/auth"
-	"bookarr/internal/db"
-	"bookarr/internal/prowlarr"
-	"bookarr/internal/qbit"
-	"bookarr/internal/requests"
+	"shelfarr/internal/auth"
+	"shelfarr/internal/db"
+	"shelfarr/internal/prowlarr"
+	"shelfarr/internal/qbit"
+	"shelfarr/internal/requests"
 )
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -113,6 +115,9 @@ func fakeQBitServer(t *testing.T) *httptest.Server {
 		case "/api/v2/auth/login":
 			http.SetCookie(w, &http.Cookie{Name: "SID", Value: "sid"})
 			fmt.Fprint(w, "Ok.")
+		case "/api/v2/app/preferences":
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"save_path":"/downloads"}`)
 		case "/api/v2/torrents/add":
 			fmt.Fprint(w, "Ok.")
 		default:
@@ -225,9 +230,9 @@ func TestSubmitMissingFields(t *testing.T) {
 	h := requests.New(d, prowlarr.New("", ""), qbit.New("", "", ""), "/dl")
 
 	cases := []string{
-		`{"author":"A","torrentGuid":"g"}`,  // missing title
-		`{"title":"T","torrentGuid":"g"}`,   // missing author
-		`{"title":"T","author":"A"}`,        // missing torrentGuid
+		`{"author":"A","torrentGuid":"g"}`, // missing title
+		`{"title":"T","torrentGuid":"g"}`,  // missing author
+		`{"title":"T","author":"A"}`,       // missing torrentGuid
 	}
 	for _, body := range cases {
 		req := authReq(t, http.MethodPost, "/api/requests", body, cfg, userID, "alice", "user")
@@ -444,5 +449,140 @@ func TestGetNotFound(t *testing.T) {
 
 	if rr.Code != http.StatusNotFound {
 		t.Errorf("expected 404, got %d", rr.Code)
+	}
+}
+
+// ── ListWatchDir ──────────────────────────────────────────────────────────────
+
+func TestListWatchDirNotConfigured(t *testing.T) {
+	d := openTestDB(t)
+	cfg := testTokenCfg()
+	adminID := seedUser(t, d, "admin", "admin")
+
+	h := requests.New(d, prowlarr.New("", ""), qbit.New("", "", ""), "")
+	// no SetImportConfig call → watchDir is empty
+
+	req := authReq(t, http.MethodGet, "/api/watchdir", "", cfg, adminID, "admin", "admin")
+	rr := httptest.NewRecorder()
+	h.ListWatchDir(rr, req)
+
+	if rr.Code != http.StatusNotImplemented {
+		t.Errorf("expected 501, got %d", rr.Code)
+	}
+}
+
+func TestListWatchDirFiltersKnown(t *testing.T) {
+	d := openTestDB(t)
+	cfg := testTokenCfg()
+	adminID := seedUser(t, d, "admin", "admin")
+
+	// Create a temp dir with two entries.
+	dir := t.TempDir()
+	if err := os.MkdirAll(dir+"/Tracked Book", 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(dir+"/Untracked Book", 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Seed a request whose torrent_name matches the first entry.
+	trackedID := seedUser(t, d, "bob", "user")
+	if err := d.CreateRequest(context.Background(), &db.Request{
+		ID:          uuid.NewString(),
+		UserID:      trackedID,
+		Title:       "Tracked Book",
+		Author:      "Author",
+		SearchQuery: "Tracked Book Author",
+		TorrentName: sql.NullString{String: "Tracked Book", Valid: true},
+		Status:      db.StatusDownloading,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	h := requests.New(d, prowlarr.New("", ""), qbit.New("", "", ""), "")
+	h.SetImportConfig(dir, nil, nil)
+
+	req := authReq(t, http.MethodGet, "/api/watchdir", "", cfg, adminID, "admin", "admin")
+	rr := httptest.NewRecorder()
+	h.ListWatchDir(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d — body: %s", rr.Code, rr.Body)
+	}
+	var results []map[string]any
+	if err := json.NewDecoder(rr.Body).Decode(&results); err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1 untracked entry, got %d", len(results))
+	}
+	if results[0]["name"] != "Untracked Book" {
+		t.Errorf("expected 'Untracked Book', got %v", results[0]["name"])
+	}
+}
+
+// ── Import ────────────────────────────────────────────────────────────────────
+
+func TestImportNotConfigured(t *testing.T) {
+	d := openTestDB(t)
+	cfg := testTokenCfg()
+	adminID := seedUser(t, d, "admin", "admin")
+
+	h := requests.New(d, prowlarr.New("", ""), qbit.New("", "", ""), "")
+
+	req := authReq(t, http.MethodPost, "/api/import",
+		`{"torrentName":"My Book","title":"My Book","author":"Author"}`,
+		cfg, adminID, "admin", "admin")
+	rr := httptest.NewRecorder()
+	h.Import(rr, req)
+
+	if rr.Code != http.StatusNotImplemented {
+		t.Errorf("expected 501, got %d", rr.Code)
+	}
+}
+
+func TestImportCreatesRequestAndRunsPipeline(t *testing.T) {
+	d := openTestDB(t)
+	cfg := testTokenCfg()
+	adminID := seedUser(t, d, "admin", "admin")
+
+	var pipelineCalled string // records the torrentName passed to onImport
+
+	h := requests.New(d, prowlarr.New("", ""), qbit.New("", "", ""), "")
+	h.SetImportConfig(t.TempDir(),
+		func(_ context.Context, _ *db.Request, torrentName string) error {
+			pipelineCalled = torrentName
+			return nil
+		},
+		nil,
+	)
+	// Run synchronously for deterministic assertions.
+	requests.SetLaunch(h, func(f func()) { f() })
+
+	req := authReq(t, http.MethodPost, "/api/import",
+		`{"torrentName":"My Audiobook","title":"My Book","author":"Great Author"}`,
+		cfg, adminID, "admin", "admin")
+	rr := httptest.NewRecorder()
+	h.Import(rr, req)
+
+	if rr.Code != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d — body: %s", rr.Code, rr.Body)
+	}
+	if pipelineCalled != "My Audiobook" {
+		t.Errorf("pipeline torrentName=%q want %q", pipelineCalled, "My Audiobook")
+	}
+
+	// After sync pipeline, status should be "done".
+	var resp map[string]any
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatal(err)
+	}
+	id, _ := resp["id"].(string)
+	saved, err := d.GetRequest(context.Background(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if saved.Status != db.StatusDone {
+		t.Errorf("status=%q want %q", saved.Status, db.StatusDone)
 	}
 }

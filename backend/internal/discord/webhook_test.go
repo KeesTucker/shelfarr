@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"bookarr/internal/metadata"
+	"shelfarr/internal/metadata"
 )
 
 // fakeDiscord starts an httptest server that accepts webhook POSTs and stores
@@ -90,10 +90,9 @@ func TestNotifyComplete_ContainsKeyFields(t *testing.T) {
 	srv, getContent := fakeDiscord(t)
 
 	book := &metadata.Book{
-		Title:    "The Final Empire",
-		Author:   "Brandon Sanderson",
-		Narrator: "Michael Kramer",
-		Year:     2006,
+		Title:  "The Final Empire",
+		Author: "Brandon Sanderson",
+		Year:   2006,
 	}
 	err := NotifyComplete(context.Background(), srv.URL, book, "alice",
 		"/audiobooks/Brandon Sanderson/The Final Empire (2006)")
@@ -105,7 +104,6 @@ func TestNotifyComplete_ContainsKeyFields(t *testing.T) {
 	for _, want := range []string{
 		"The Final Empire",
 		"Brandon Sanderson",
-		"Michael Kramer",
 		"alice",
 		"/audiobooks/Brandon Sanderson/The Final Empire (2006)",
 		"📚",

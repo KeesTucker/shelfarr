@@ -11,17 +11,17 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
-	"github.com/google/uuid"
 
-	"bookarr/internal/auth"
-	"bookarr/internal/config"
-	"bookarr/internal/db"
-	"bookarr/internal/discord"
-	"bookarr/internal/library"
-	"bookarr/internal/metadata"
-	"bookarr/internal/prowlarr"
-	"bookarr/internal/qbit"
-	"bookarr/internal/requests"
+	"shelfarr/internal/abs"
+	"shelfarr/internal/auth"
+	"shelfarr/internal/config"
+	"shelfarr/internal/db"
+	"shelfarr/internal/discord"
+	"shelfarr/internal/library"
+	"shelfarr/internal/metadata"
+	"shelfarr/internal/prowlarr"
+	"shelfarr/internal/qbit"
+	"shelfarr/internal/requests"
 )
 
 func main() {
@@ -43,16 +43,13 @@ func run() error {
 	}
 	defer database.Close()
 
-	if err := seedAdmin(context.Background(), database, cfg); err != nil {
-		return fmt.Errorf("seed admin: %w", err)
-	}
-
 	tokenCfg := auth.TokenConfig{
 		Secret: []byte(cfg.JWTSecret),
 		Expiry: cfg.JWTExpiry,
 	}
 
 	// Create clients here so both the router and the watcher share the same instances.
+	absClient := abs.New(cfg.ABSURL)
 	prowlarrClient := prowlarr.New(cfg.ProwlarrURL, cfg.ProwlarrAPIKey)
 	qbitClient := qbit.New(cfg.QBitURL, cfg.QBitUsername, cfg.QBitPassword)
 
@@ -70,7 +67,7 @@ func run() error {
 		}
 	}()
 
-	metaClient := metadata.New(cfg.AudnexusURL)
+	metaClient := metadata.New()
 
 	watchDir := cfg.WatchDir
 	if watchDir == "" {
@@ -108,8 +105,6 @@ func run() error {
 			"title", book.Title,
 			"author", book.Author,
 			"year", book.Year,
-			"narrator", book.Narrator,
-			"series", book.Series,
 		)
 
 		// 2. Wait for the file to appear in the watch dir (Syncthing may delay
@@ -140,31 +135,35 @@ func run() error {
 	watcher := qbit.NewWatcher(database, qbitClient, onComplete, onFail)
 	watcher.Start(ctx)
 
-	r := buildRouter(database, cfg, tokenCfg, prowlarrClient, qbitClient, cfg.StaticDir)
+	// onImport adapts onComplete for files already in the watch dir: there is
+	// no real TorrentInfo, so we synthesise one using the entry name.
+	onImportFn := func(ctx context.Context, req *db.Request, torrentName string) error {
+		return onComplete(ctx, req, &qbit.TorrentInfo{Name: torrentName})
+	}
+
+	requestsHandler := requests.New(database, prowlarrClient, qbitClient, cfg.QBitCategory)
+	requestsHandler.SetImportConfig(watchDir, onImportFn, onFail)
+
+	r := buildRouter(database, cfg, tokenCfg, absClient, prowlarrClient, requestsHandler, cfg.StaticDir)
 
 	slog.Info("server listening", "port", cfg.Port)
 	return http.ListenAndServe(":"+cfg.Port, r)
 }
 
 // buildRouter wires all routes. Auth-protected routes are added in a sub-router
-// that applies the Authenticate middleware. New handler groups are mounted here
-// as they are built in subsequent steps.
-func buildRouter(database *db.DB, cfg *config.Config, tokenCfg auth.TokenConfig, prowlarrClient *prowlarr.Client, qbitClient *qbit.Client, staticDir string) http.Handler {
+// that applies the Authenticate middleware.
+func buildRouter(database *db.DB, cfg *config.Config, tokenCfg auth.TokenConfig, absClient *abs.Client, prowlarrClient *prowlarr.Client, requestsHandler *requests.Handler, staticDir string) http.Handler {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 
-	authHandler := auth.NewHandler(database, tokenCfg)
+	authHandler := auth.NewHandler(database, tokenCfg, absClient)
 	searchHandler := prowlarr.NewHandler(prowlarrClient)
-	requestsHandler := requests.New(database, prowlarrClient, qbitClient, cfg.QBitCategory)
 
 	// Public — no JWT required.
 	r.Post("/api/auth/login", authHandler.Login)
-
-	// Wizarr / provisioning: service-token auth, no user JWT required.
-	r.With(auth.RequireServiceToken(cfg.ServiceToken)).Post("/api/users", authHandler.CreateUser)
 
 	// Protected — JWT required for all routes in this group.
 	r.Group(func(r chi.Router) {
@@ -174,38 +173,17 @@ func buildRouter(database *db.DB, cfg *config.Config, tokenCfg auth.TokenConfig,
 		r.Post("/api/requests", requestsHandler.Submit)
 		r.Get("/api/requests", requestsHandler.List)
 		r.Get("/api/requests/{id}", requestsHandler.Get)
+
+		// Admin-only import routes.
+		r.Group(func(r chi.Router) {
+			r.Use(auth.RequireAdmin)
+			r.Get("/api/watchdir", requestsHandler.ListWatchDir)
+			r.Post("/api/import", requestsHandler.Import)
+		})
 	})
 
 	// Serve the frontend SPA for all non-API paths.
 	r.Handle("/*", spaHandler(staticDir))
 
 	return r
-}
-
-// seedAdmin creates the initial admin account from environment variables if
-// the users table is empty. This is a no-op on every subsequent startup.
-func seedAdmin(ctx context.Context, database *db.DB, cfg *config.Config) error {
-	n, err := database.CountUsers(ctx)
-	if err != nil {
-		return fmt.Errorf("count users: %w", err)
-	}
-	if n > 0 {
-		return nil // users already exist, nothing to do
-	}
-
-	if cfg.AdminPassword == "" {
-		return fmt.Errorf("no users exist: set ADMIN_USERNAME and ADMIN_PASSWORD to create the first admin account")
-	}
-
-	hash, err := auth.HashPassword(cfg.AdminPassword)
-	if err != nil {
-		return fmt.Errorf("hash admin password: %w", err)
-	}
-
-	if err := database.CreateUser(ctx, uuid.NewString(), cfg.AdminUsername, hash, "admin"); err != nil {
-		return fmt.Errorf("create admin user: %w", err)
-	}
-
-	slog.Info("created admin account", "username", cfg.AdminUsername)
-	return nil
 }

@@ -20,7 +20,7 @@ import (
 	"testing"
 	"time"
 
-	"bookarr/internal/qbit"
+	"shelfarr/internal/qbit"
 )
 
 func integrationClient(t *testing.T) *qbit.Client {
@@ -65,10 +65,10 @@ func TestIntegration_AddAndGetTorrent(t *testing.T) {
 	c := integrationClient(t)
 
 	// A well-known all-zero magnet that qBit will accept but never connect to.
-	const magnet = "magnet:?xt=urn:btih:aabbccddeeff00112233445566778899aabbccdd&dn=bookarr-integration-test"
+	const magnet = "magnet:?xt=urn:btih:aabbccddeeff00112233445566778899aabbccdd&dn=shelfarr-integration-test"
 	const wantHash = "aabbccddeeff00112233445566778899aabbccdd"
 
-	hash, err := c.AddTorrent(context.Background(), magnet, savePath())
+	hash, err := c.AddTorrent(context.Background(), magnet, savePath(), "")
 	if err != nil {
 		t.Fatalf("AddTorrent: %v", err)
 	}

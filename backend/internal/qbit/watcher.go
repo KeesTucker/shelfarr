@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"time"
 
-	"bookarr/internal/db"
+	"shelfarr/internal/db"
 )
 
 const (

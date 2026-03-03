@@ -1,4 +1,4 @@
-module bookarr
+module shelfarr
 
 go 1.24.0
 

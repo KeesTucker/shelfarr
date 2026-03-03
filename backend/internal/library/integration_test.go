@@ -25,8 +25,8 @@ import (
 	"testing"
 	"time"
 
-	"bookarr/internal/library"
-	"bookarr/internal/metadata"
+	"shelfarr/internal/library"
+	"shelfarr/internal/metadata"
 )
 
 func watchDir(t *testing.T) string {

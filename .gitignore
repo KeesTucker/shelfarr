@@ -2,3 +2,4 @@
 /.idea/*
 /backend/.run/*
 /backend/temp/*
+/frontend/.svelte-kit/*

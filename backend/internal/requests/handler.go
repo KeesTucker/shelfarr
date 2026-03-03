@@ -2,21 +2,23 @@
 package requests
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
-	"bookarr/internal/auth"
-	"bookarr/internal/db"
-	"bookarr/internal/prowlarr"
-	"bookarr/internal/qbit"
-	"bookarr/internal/respond"
+	"shelfarr/internal/auth"
+	"shelfarr/internal/db"
+	"shelfarr/internal/prowlarr"
+	"shelfarr/internal/qbit"
+	"shelfarr/internal/respond"
 )
 
 // Handler handles the /api/requests routes.
@@ -25,6 +27,12 @@ type Handler struct {
 	prowlarr *prowlarr.Client
 	qbit     *qbit.Client
 	category string // QBIT_CATEGORY (empty = uncategorised)
+
+	// optional import fields — set via SetImportConfig.
+	watchDir string
+	onImport func(ctx context.Context, req *db.Request, torrentName string) error
+	onFail   func(ctx context.Context, req *db.Request, reason string)
+	launch   func(func())
 }
 
 // New creates a Handler wired to the given dependencies.
@@ -34,7 +42,21 @@ func New(database *db.DB, p *prowlarr.Client, q *qbit.Client, category string) *
 		prowlarr: p,
 		qbit:     q,
 		category: category,
+		launch:   func(f func()) { go f() },
 	}
+}
+
+// SetImportConfig wires the optional file-import functionality.
+// watchDir is the directory to scan for untracked files; onImport runs the
+// move pipeline for each import; onFail is called (best-effort) on error.
+func (h *Handler) SetImportConfig(
+	watchDir string,
+	onImport func(ctx context.Context, req *db.Request, torrentName string) error,
+	onFail func(ctx context.Context, req *db.Request, reason string),
+) {
+	h.watchDir = watchDir
+	h.onImport = onImport
+	h.onFail = onFail
 }
 
 // submitBody is the request body accepted by Submit.
@@ -189,6 +211,119 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respond.JSON(w, http.StatusOK, toResponse(req))
+}
+
+// ── import ────────────────────────────────────────────────────────────────────
+
+// watchDirEntry is a single item returned by ListWatchDir.
+type watchDirEntry struct {
+	Name string `json:"name"`
+}
+
+// importBody is the request body accepted by Import.
+type importBody struct {
+	TorrentName string `json:"torrentName"`
+	Title       string `json:"title"`
+	Author      string `json:"author"`
+}
+
+// ListWatchDir handles GET /api/watchdir. Admin only (enforced at router).
+// Returns top-level entries in the watch directory that don't already have a
+// corresponding torrent_name in the database.
+func (h *Handler) ListWatchDir(w http.ResponseWriter, r *http.Request) {
+	if h.watchDir == "" {
+		respond.Error(w, http.StatusNotImplemented, "watch dir not configured")
+		return
+	}
+
+	entries, err := os.ReadDir(h.watchDir)
+	if err != nil {
+		slog.Error("list watch dir", "path", h.watchDir, "err", err)
+		respond.Error(w, http.StatusInternalServerError, "could not read watch directory")
+		return
+	}
+
+	known, err := h.db.ListTorrentNames(r.Context())
+	if err != nil {
+		slog.Error("list torrent names for watchdir", "err", err)
+		respond.Error(w, http.StatusInternalServerError, "could not query database")
+		return
+	}
+	knownSet := make(map[string]bool, len(known))
+	for _, n := range known {
+		knownSet[n] = true
+	}
+
+	out := make([]watchDirEntry, 0, len(entries))
+	for _, e := range entries {
+		if !knownSet[e.Name()] {
+			out = append(out, watchDirEntry{Name: e.Name()})
+		}
+	}
+	respond.JSON(w, http.StatusOK, out)
+}
+
+// Import handles POST /api/import. Admin only (enforced at router).
+// Creates a request record in "moving" status and asynchronously runs the
+// move pipeline (metadata lookup → file move → Discord notification).
+func (h *Handler) Import(w http.ResponseWriter, r *http.Request) {
+	if h.onImport == nil {
+		respond.Error(w, http.StatusNotImplemented, "import not configured")
+		return
+	}
+
+	claims, _ := auth.ClaimsFromContext(r.Context())
+
+	var body importBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		respond.Error(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if body.TorrentName == "" || body.Title == "" || body.Author == "" {
+		respond.Error(w, http.StatusBadRequest, "torrentName, title, and author are required")
+		return
+	}
+
+	req := &db.Request{
+		ID:          uuid.NewString(),
+		UserID:      claims.UserID,
+		Title:       body.Title,
+		Author:      body.Author,
+		SearchQuery: body.Title + " " + body.Author,
+		TorrentName: sql.NullString{String: body.TorrentName, Valid: true},
+		Status:      db.StatusMoving,
+	}
+	if err := h.db.CreateRequest(r.Context(), req); err != nil {
+		slog.Error("import: create request", "user_id", claims.UserID, "err", err)
+		respond.Error(w, http.StatusInternalServerError, "failed to save request")
+		return
+	}
+
+	h.runImport(req)
+	respond.JSON(w, http.StatusAccepted, toResponse(req))
+}
+
+// runImport launches the import pipeline in a background goroutine. It mirrors
+// the watcher's handleComplete pattern: onImport → StatusDone, or StatusFailed
+// + onFail on error. Uses context.Background() so the goroutine outlives the
+// originating HTTP request.
+func (h *Handler) runImport(req *db.Request) {
+	ctx := context.Background()
+	h.launch(func() {
+		if err := h.onImport(ctx, req, req.TorrentName.String); err != nil {
+			slog.Error("import: pipeline failed", "request_id", req.ID, "err", err)
+			_ = h.db.UpdateRequestStatus(ctx, req.ID, db.StatusFailed, db.WithError(err.Error()))
+			if h.onFail != nil {
+				h.onFail(ctx, req, err.Error())
+			}
+			return
+		}
+		if err := h.db.UpdateRequestStatus(ctx, req.ID, db.StatusDone); err != nil {
+			slog.Error("import: set status done", "request_id", req.ID, "err", err)
+			return
+		}
+		slog.Info("import: done", "request_id", req.ID)
+	})
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────

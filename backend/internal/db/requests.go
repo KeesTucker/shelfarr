@@ -212,6 +212,26 @@ func (db *DB) ListAllRequestsWithUser(ctx context.Context) ([]*RequestWithUser, 
 	return result, nil
 }
 
+// ListTorrentNames returns all non-null torrent_name values across all
+// requests. Used by the watch-dir scanner to exclude items already tracked.
+func (db *DB) ListTorrentNames(ctx context.Context) ([]string, error) {
+	rows, err := db.QueryContext(ctx,
+		`SELECT torrent_name FROM requests WHERE torrent_name IS NOT NULL`)
+	if err != nil {
+		return nil, fmt.Errorf("list torrent names: %w", err)
+	}
+	defer rows.Close()
+	var names []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, fmt.Errorf("scan torrent name: %w", err)
+		}
+		names = append(names, name)
+	}
+	return names, rows.Err()
+}
+
 // ListActiveDownloads returns all requests with status "downloading". Called
 // on server startup so the watcher goroutine can resume monitoring in-flight
 // downloads that survived a restart.

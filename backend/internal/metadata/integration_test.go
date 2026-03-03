@@ -2,7 +2,7 @@
 
 package metadata_test
 
-// Integration tests that hit the real OpenLibrary and Audnexus APIs.
+// Integration tests that hit the real OpenLibrary API.
 //
 // Run with:
 //
@@ -13,18 +13,11 @@ package metadata_test
 
 import (
 	"context"
-	"os"
 	"testing"
 	"time"
 
-	"bookarr/internal/metadata"
+	"shelfarr/internal/metadata"
 )
-
-// integrationClient returns a Client with Audnexus enabled only when
-// AUDNEXUS_URL is set (it has no public hosted instance).
-func integrationClient() *metadata.Client {
-	return metadata.New(os.Getenv("AUDNEXUS_URL"))
-}
 
 // ── OpenLibrary ───────────────────────────────────────────────────────────────
 
@@ -34,7 +27,7 @@ func TestIntegration_OpenLibrary_WellKnownBook(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	c := integrationClient()
+	c := metadata.New()
 	book := c.Resolve(ctx, "The Final Empire", "Brandon Sanderson")
 
 	if book.Title == "" {
@@ -55,7 +48,7 @@ func TestIntegration_OpenLibrary_UnambiguousYear(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	c := integrationClient()
+	c := metadata.New()
 	// "The Hobbit" was first published in 1937.
 	book := c.Resolve(ctx, "The Hobbit", "J.R.R. Tolkien")
 
@@ -74,7 +67,7 @@ func TestIntegration_OpenLibrary_NoResults(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	c := integrationClient()
+	c := metadata.New()
 	const title, author = "zzz_no_such_book_xqpwlm", "zzz_no_such_author_xqpwlm"
 	book := c.Resolve(ctx, title, author)
 
@@ -84,29 +77,6 @@ func TestIntegration_OpenLibrary_NoResults(t *testing.T) {
 	}
 	if book.Author != author {
 		t.Errorf("Author=%q; want caller fallback %q", book.Author, author)
-	}
-}
-
-// ── Audnexus ─────────────────────────────────────────────────────────────────
-
-// TestIntegration_Audnexus_Response checks that the Audnexus lookup either
-// returns usable narrator/series data or degrades gracefully to empty strings.
-// We log what we get rather than asserting specific values because Audnexus is
-// primarily ASIN-based and title-search support is best-effort.
-func TestIntegration_Audnexus_Response(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-
-	c := integrationClient()
-	book := c.Resolve(ctx, "The Final Empire", "Brandon Sanderson")
-
-	// The test passes regardless of whether Audnexus returned data; we just
-	// verify the fields are either populated or empty (not garbage).
-	t.Logf("AN result: narrator=%q series=%q", book.Narrator, book.Series)
-
-	// Sanity: if Audnexus did return a narrator, it must be a non-whitespace string.
-	if book.Narrator == " " || book.Narrator == "," {
-		t.Errorf("Narrator=%q looks malformed", book.Narrator)
 	}
 }
 
@@ -122,7 +92,7 @@ func TestIntegration_Resolve_AlwaysReturnsBook(t *testing.T) {
 		{"zzz_no_such_book_xqpwlm", "zzz_no_such_author_xqpwlm"},
 	}
 
-	c := integrationClient()
+	c := metadata.New()
 
 	for _, tc := range cases {
 		t.Run(tc.title, func(t *testing.T) {

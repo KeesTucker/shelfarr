@@ -24,9 +24,6 @@ type Config struct {
 	QBitPassword string
 	QBitCategory string
 
-	// Metadata sources
-	AudnexusURL string // optional; empty string disables Audnexus lookups
-
 	// Library
 	// WatchDir is the local path where completed files appear (either directly
 	// from qBit or delivered by Syncthing for remote seedbox setups). If empty,
@@ -68,6 +65,11 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("JWT_SECRET must be set")
 	}
 
+	absURL := os.Getenv("ABS_URL")
+	if absURL == "" {
+		return nil, fmt.Errorf("ABS_URL must be set (e.g. http://audiobookshelf:13378)")
+	}
+
 	jwtExpiry, err := time.ParseDuration(getenv("JWT_EXPIRY", "24h"))
 	if err != nil {
 		return nil, fmt.Errorf("parse JWT_EXPIRY: %w", err)
@@ -79,18 +81,17 @@ func Load() (*Config, error) {
 	}
 
 	return &Config{
-		DBPath:            getenv("DB_PATH", "/data/bookarr.db"),
+		DBPath:            getenv("DB_PATH", "/data/shelfarr.db"),
 		ProwlarrURL:       getenv("PROWLARR_URL", ""),
 		ProwlarrAPIKey:    getenv("PROWLARR_API_KEY", ""),
 		QBitURL:           getenv("QBIT_URL", ""),
 		QBitUsername:      getenv("QBIT_USERNAME", "admin"),
 		QBitPassword:      getenv("QBIT_PASSWORD", ""),
 		QBitCategory:      getenv("QBIT_CATEGORY", ""),
-		AudnexusURL:       getenv("AUDNEXUS_URL", ""),
 		WatchDir:          getenv("WATCH_DIR", ""),
 		LibraryDir:        getenv("LIBRARY_DIR", "/audiobooks"),
 		WatchTimeout:      watchTimeout,
-		ABSURL:            getenv("ABS_URL", ""),
+		ABSURL:            absURL,
 		ABSAPIKey:         getenv("ABS_API_KEY", ""),
 		ABSLibraryID:      getenv("ABS_LIBRARY_ID", ""),
 		DiscordWebhookURL: getenv("DISCORD_WEBHOOK_URL", ""),

@@ -1,26 +1,34 @@
 package auth
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
-	"strings"
 
-	"github.com/google/uuid"
-
-	"bookarr/internal/db"
-	"bookarr/internal/respond"
+	"shelfarr/internal/abs"
+	"shelfarr/internal/db"
+	"shelfarr/internal/respond"
 )
+
+// absAuthenticator is the interface used to delegate login to AudioBookShelf.
+// *abs.Client satisfies it. Pass nil to fall back to local bcrypt auth.
+type absAuthenticator interface {
+	Login(ctx context.Context, username, password string) (*abs.User, error)
+}
 
 // Handler handles the /api/auth/* routes.
 type Handler struct {
-	db  *db.DB
-	cfg TokenConfig
+	db      *db.DB
+	cfg     TokenConfig
+	absAuth absAuthenticator // nil → local DB auth
 }
 
-// NewHandler creates an auth handler bound to the given DB and token config.
-func NewHandler(database *db.DB, cfg TokenConfig) *Handler {
-	return &Handler{db: database, cfg: cfg}
+// NewHandler creates an auth handler. When absAuth is non-nil, Login delegates
+// credential validation to AudioBookShelf; otherwise local bcrypt is used.
+func NewHandler(database *db.DB, cfg TokenConfig, absAuth absAuthenticator) *Handler {
+	return &Handler{db: database, cfg: cfg, absAuth: absAuth}
 }
 
 // ── request / response types ──────────────────────────────────────────────────
@@ -44,7 +52,9 @@ type UserDTO struct {
 
 // ── handlers ──────────────────────────────────────────────────────────────────
 
-// Login validates the provided credentials and returns a signed JWT.
+// Login validates credentials and returns a signed JWT.
+// When an ABS client is configured it proxies to ABS; otherwise it checks
+// the local bcrypt-hashed password in the database.
 //
 //	POST /api/auth/login
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
@@ -58,10 +68,47 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if h.absAuth != nil {
+		h.loginABS(w, r, req)
+		return
+	}
+	h.loginLocal(w, r, req)
+}
+
+func (h *Handler) loginABS(w http.ResponseWriter, r *http.Request, req loginRequest) {
+	absUser, err := h.absAuth.Login(r.Context(), req.Username, req.Password)
+	if err != nil {
+		if errors.Is(err, abs.ErrInvalidCredentials) {
+			respond.Error(w, http.StatusUnauthorized, "invalid credentials")
+			return
+		}
+		slog.Error("abs login failed", "err", err)
+		respond.Error(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+
+	if err := h.db.UpsertABSUser(r.Context(), absUser.ID, absUser.Username, absUser.Role()); err != nil {
+		slog.Error("upsert abs user", "err", err)
+		respond.Error(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+
+	token, err := NewToken(h.cfg, absUser.ID, absUser.Username, absUser.Role())
+	if err != nil {
+		slog.Error("sign JWT for abs user", "err", err)
+		respond.Error(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+
+	respond.JSON(w, http.StatusOK, loginResponse{
+		Token: token,
+		User:  UserDTO{ID: absUser.ID, Username: absUser.Username, Role: absUser.Role()},
+	})
+}
+
+func (h *Handler) loginLocal(w http.ResponseWriter, r *http.Request, req loginRequest) {
 	user, err := h.db.GetUserByUsername(r.Context(), req.Username)
 	if err != nil {
-		// Return the same generic message for "no such user" and "wrong
-		// password" to prevent username enumeration.
 		respond.Error(w, http.StatusUnauthorized, "invalid credentials")
 		return
 	}
@@ -81,50 +128,6 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		Token: token,
 		User:  UserDTO{ID: user.ID, Username: user.Username, Role: user.Role},
 	})
-}
-
-// createUserRequest is the body accepted by CreateUser.
-type createUserRequest struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
-}
-
-// CreateUser provisions a new regular user account. Intended for Wizarr (and
-// similar provisioning tools) that call this endpoint with a shared service
-// token rather than a user JWT.
-//
-//	POST /api/users
-func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
-	var req createUserRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respond.Error(w, http.StatusBadRequest, "invalid request body")
-		return
-	}
-	if req.Username == "" || req.Password == "" {
-		respond.Error(w, http.StatusBadRequest, "username and password required")
-		return
-	}
-
-	hash, err := HashPassword(req.Password)
-	if err != nil {
-		slog.Error("hash password for new user", "err", err)
-		respond.Error(w, http.StatusInternalServerError, "internal server error")
-		return
-	}
-
-	id := uuid.NewString()
-	if err := h.db.CreateUser(r.Context(), id, req.Username, hash, "user"); err != nil {
-		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
-			respond.Error(w, http.StatusConflict, "username already taken")
-			return
-		}
-		slog.Error("create user", "err", err)
-		respond.Error(w, http.StatusInternalServerError, "internal server error")
-		return
-	}
-
-	slog.Info("user created via service token", "username", req.Username, "id", id)
-	respond.JSON(w, http.StatusCreated, UserDTO{ID: id, Username: req.Username, Role: "user"})
 }
 
 // Me returns the current user's profile. The DB is consulted so the response

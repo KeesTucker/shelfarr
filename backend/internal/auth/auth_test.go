@@ -11,8 +11,9 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 
-	"bookarr/internal/auth"
-	"bookarr/internal/db"
+	"shelfarr/internal/abs"
+	"shelfarr/internal/auth"
+	"shelfarr/internal/db"
 )
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -43,6 +44,16 @@ func seedUser(t *testing.T, d *db.DB, username, password, role string) string {
 		t.Fatal(err)
 	}
 	return id
+}
+
+// absStub is a test double for the ABS authenticator.
+type absStub struct {
+	user *abs.User
+	err  error
+}
+
+func (s absStub) Login(_ context.Context, _, _ string) (*abs.User, error) {
+	return s.user, s.err
 }
 
 // ── password ──────────────────────────────────────────────────────────────────
@@ -96,7 +107,6 @@ func TestTokenWrongSecret(t *testing.T) {
 
 func TestTokenExpired(t *testing.T) {
 	cfg := testTokenCfg()
-	// Manually craft a token with an expiry in the past.
 	past := time.Now().Add(-time.Hour)
 	claims := auth.Claims{
 		RegisteredClaims: jwt.RegisteredClaims{
@@ -122,7 +132,6 @@ func TestTokenExpired(t *testing.T) {
 func TestAuthenticateMiddleware(t *testing.T) {
 	cfg := testTokenCfg()
 
-	// The inner handler just records that it was reached.
 	reached := false
 	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		reached = true
@@ -177,7 +186,7 @@ func TestAuthenticateMiddleware(t *testing.T) {
 	t.Run("wrong prefix", func(t *testing.T) {
 		tokenStr, _ := auth.NewToken(cfg, "u42", "bob", "user")
 		req := httptest.NewRequest(http.MethodGet, "/", nil)
-		req.Header.Set("Authorization", "Token "+tokenStr) // not "Bearer"
+		req.Header.Set("Authorization", "Token "+tokenStr)
 		rr := httptest.NewRecorder()
 		handler.ServeHTTP(rr, req)
 		if rr.Code != http.StatusUnauthorized {
@@ -213,13 +222,13 @@ func TestRequireAdmin(t *testing.T) {
 	}
 }
 
-// ── handler: Login ────────────────────────────────────────────────────────────
+// ── handler: Login (local auth) ───────────────────────────────────────────────
 
-func TestLoginOK(t *testing.T) {
+func TestLoginLocalOK(t *testing.T) {
 	d := openTestDB(t)
 	seedUser(t, d, "alice", "password123", "admin")
 
-	h := auth.NewHandler(d, testTokenCfg())
+	h := auth.NewHandler(d, testTokenCfg(), nil) // nil = local auth
 	body := `{"username":"alice","password":"password123"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/auth/login", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -245,11 +254,11 @@ func TestLoginOK(t *testing.T) {
 	}
 }
 
-func TestLoginWrongPassword(t *testing.T) {
+func TestLoginLocalWrongPassword(t *testing.T) {
 	d := openTestDB(t)
 	seedUser(t, d, "alice", "password123", "user")
 
-	h := auth.NewHandler(d, testTokenCfg())
+	h := auth.NewHandler(d, testTokenCfg(), nil)
 	body := `{"username":"alice","password":"wrong"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/auth/login", strings.NewReader(body))
 	rr := httptest.NewRecorder()
@@ -260,9 +269,9 @@ func TestLoginWrongPassword(t *testing.T) {
 	}
 }
 
-func TestLoginUnknownUser(t *testing.T) {
+func TestLoginLocalUnknownUser(t *testing.T) {
 	d := openTestDB(t)
-	h := auth.NewHandler(d, testTokenCfg())
+	h := auth.NewHandler(d, testTokenCfg(), nil)
 
 	body := `{"username":"ghost","password":"pw"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/auth/login", strings.NewReader(body))
@@ -276,7 +285,7 @@ func TestLoginUnknownUser(t *testing.T) {
 
 func TestLoginMissingFields(t *testing.T) {
 	d := openTestDB(t)
-	h := auth.NewHandler(d, testTokenCfg())
+	h := auth.NewHandler(d, testTokenCfg(), nil)
 
 	for _, body := range []string{
 		`{"username":"alice"}`,
@@ -294,7 +303,7 @@ func TestLoginMissingFields(t *testing.T) {
 
 func TestLoginBadJSON(t *testing.T) {
 	d := openTestDB(t)
-	h := auth.NewHandler(d, testTokenCfg())
+	h := auth.NewHandler(d, testTokenCfg(), nil)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/auth/login", strings.NewReader("not json"))
 	rr := httptest.NewRecorder()
@@ -302,6 +311,108 @@ func TestLoginBadJSON(t *testing.T) {
 
 	if rr.Code != http.StatusBadRequest {
 		t.Errorf("expected 400, got %d", rr.Code)
+	}
+}
+
+// ── handler: Login (ABS auth) ─────────────────────────────────────────────────
+
+func TestLoginABSOK(t *testing.T) {
+	d := openTestDB(t)
+	stub := absStub{user: &abs.User{ID: "abs-u1", Username: "alice", Type: "admin"}}
+	h := auth.NewHandler(d, testTokenCfg(), stub)
+
+	body := `{"username":"alice","password":"anypassword"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/login", strings.NewReader(body))
+	rr := httptest.NewRecorder()
+	h.Login(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d — body: %s", rr.Code, rr.Body)
+	}
+
+	var resp struct {
+		Token string       `json:"token"`
+		User  auth.UserDTO `json:"user"`
+	}
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.Token == "" {
+		t.Error("expected non-empty token")
+	}
+	if resp.User.ID != "abs-u1" || resp.User.Username != "alice" || resp.User.Role != "admin" {
+		t.Errorf("unexpected user in response: %+v", resp.User)
+	}
+}
+
+func TestLoginABSInvalidCredentials(t *testing.T) {
+	d := openTestDB(t)
+	stub := absStub{err: abs.ErrInvalidCredentials}
+	h := auth.NewHandler(d, testTokenCfg(), stub)
+
+	body := `{"username":"alice","password":"wrong"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/login", strings.NewReader(body))
+	rr := httptest.NewRecorder()
+	h.Login(rr, req)
+
+	if rr.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401, got %d", rr.Code)
+	}
+}
+
+func TestLoginABSUpsertsPersistsUser(t *testing.T) {
+	d := openTestDB(t)
+	stub := absStub{user: &abs.User{ID: "abs-u2", Username: "bob", Type: "user"}}
+	h := auth.NewHandler(d, testTokenCfg(), stub)
+
+	body := `{"username":"bob","password":"pw"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/login", strings.NewReader(body))
+	rr := httptest.NewRecorder()
+	h.Login(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+
+	// Verify the user landed in the DB so subsequent Me/request queries work.
+	user, err := d.GetUserByID(context.Background(), "abs-u2")
+	if err != nil {
+		t.Fatalf("expected user in DB after ABS login: %v", err)
+	}
+	if user.Username != "bob" || user.Role != "user" {
+		t.Errorf("unexpected persisted user: %+v", user)
+	}
+}
+
+// ── handler: Me ───────────────────────────────────────────────────────────────
+
+func TestMe(t *testing.T) {
+	d := openTestDB(t)
+	id := seedUser(t, d, "bob", "pw", "user")
+	cfg := testTokenCfg()
+
+	tokenStr, err := auth.NewToken(cfg, id, "bob", "user")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	h := auth.NewHandler(d, cfg, nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/auth/me", nil)
+	req.Header.Set("Authorization", "Bearer "+tokenStr)
+
+	rr := httptest.NewRecorder()
+	auth.Authenticate(cfg)(http.HandlerFunc(h.Me)).ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d — body: %s", rr.Code, rr.Body)
+	}
+
+	var dto auth.UserDTO
+	if err := json.NewDecoder(rr.Body).Decode(&dto); err != nil {
+		t.Fatal(err)
+	}
+	if dto.Username != "bob" || dto.ID != id {
+		t.Errorf("unexpected dto: %+v", dto)
 	}
 }
 
@@ -316,8 +427,8 @@ func TestRequireServiceToken(t *testing.T) {
 
 	cases := []struct {
 		name       string
-		configured string // token passed to RequireServiceToken
-		header     string // Authorization header value sent by client
+		configured string
+		header     string
 		wantStatus int
 	}{
 		{
@@ -341,12 +452,12 @@ func TestRequireServiceToken(t *testing.T) {
 		{
 			name:       "wrong scheme returns 403",
 			configured: token,
-			header:     "Token " + token, // not Bearer
+			header:     "Token " + token,
 			wantStatus: http.StatusForbidden,
 		},
 		{
 			name:       "unconfigured service token returns 503",
-			configured: "", // empty = SERVICE_TOKEN not set
+			configured: "",
 			header:     "Bearer anything",
 			wantStatus: http.StatusServiceUnavailable,
 		},
@@ -365,124 +476,5 @@ func TestRequireServiceToken(t *testing.T) {
 				t.Errorf("expected %d, got %d", tc.wantStatus, rr.Code)
 			}
 		})
-	}
-}
-
-// ── handler: CreateUser ───────────────────────────────────────────────────────
-
-func TestCreateUser(t *testing.T) {
-	d := openTestDB(t)
-	h := auth.NewHandler(d, testTokenCfg())
-
-	post := func(body string) *httptest.ResponseRecorder {
-		req := httptest.NewRequest(http.MethodPost, "/api/users", strings.NewReader(body))
-		req.Header.Set("Content-Type", "application/json")
-		rr := httptest.NewRecorder()
-		h.CreateUser(rr, req)
-		return rr
-	}
-
-	t.Run("valid request returns 201 with user DTO", func(t *testing.T) {
-		rr := post(`{"username":"wizarr-user","password":"securepass"}`)
-		if rr.Code != http.StatusCreated {
-			t.Fatalf("expected 201, got %d — body: %s", rr.Code, rr.Body)
-		}
-		var dto auth.UserDTO
-		if err := json.NewDecoder(rr.Body).Decode(&dto); err != nil {
-			t.Fatal(err)
-		}
-		if dto.Username != "wizarr-user" {
-			t.Errorf("unexpected username: %s", dto.Username)
-		}
-		if dto.ID == "" {
-			t.Error("expected non-empty ID")
-		}
-		if dto.Role != "user" {
-			t.Errorf("expected role 'user', got %q", dto.Role)
-		}
-	})
-
-	t.Run("created user can log in with the provided password", func(t *testing.T) {
-		post(`{"username":"login-verify","password":"mypassword"}`)
-
-		req := httptest.NewRequest(http.MethodPost, "/api/auth/login",
-			strings.NewReader(`{"username":"login-verify","password":"mypassword"}`))
-		rr := httptest.NewRecorder()
-		h.Login(rr, req)
-		if rr.Code != http.StatusOK {
-			t.Fatalf("login: expected 200, got %d — %s", rr.Code, rr.Body)
-		}
-	})
-
-	t.Run("duplicate username returns 409", func(t *testing.T) {
-		post(`{"username":"dup-user","password":"pw1"}`)
-		rr := post(`{"username":"dup-user","password":"pw2"}`)
-		if rr.Code != http.StatusConflict {
-			t.Errorf("expected 409, got %d — %s", rr.Code, rr.Body)
-		}
-	})
-
-	t.Run("provisioned user always gets role user", func(t *testing.T) {
-		rr := post(`{"username":"role-check","password":"pw123"}`)
-		if rr.Code != http.StatusCreated {
-			t.Fatalf("expected 201, got %d", rr.Code)
-		}
-		var dto auth.UserDTO
-		if err := json.NewDecoder(rr.Body).Decode(&dto); err != nil {
-			t.Fatal(err)
-		}
-		if dto.Role != "user" {
-			t.Errorf("expected role 'user', got %q", dto.Role)
-		}
-	})
-
-	for _, body := range []struct {
-		name string
-		json string
-	}{
-		{"missing username", `{"password":"pw"}`},
-		{"missing password", `{"username":"nopass"}`},
-		{"empty fields", `{}`},
-		{"bad JSON", `not json`},
-	} {
-		t.Run(body.name+" returns 400", func(t *testing.T) {
-			rr := post(body.json)
-			if rr.Code != http.StatusBadRequest {
-				t.Errorf("expected 400, got %d", rr.Code)
-			}
-		})
-	}
-}
-
-// ── handler: Me ───────────────────────────────────────────────────────────────
-
-func TestMe(t *testing.T) {
-	d := openTestDB(t)
-	id := seedUser(t, d, "bob", "pw", "user")
-	cfg := testTokenCfg()
-
-	tokenStr, err := auth.NewToken(cfg, id, "bob", "user")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	h := auth.NewHandler(d, cfg)
-	req := httptest.NewRequest(http.MethodGet, "/api/auth/me", nil)
-	req.Header.Set("Authorization", "Bearer "+tokenStr)
-
-	// Run request through the middleware first so claims land in context.
-	rr := httptest.NewRecorder()
-	auth.Authenticate(cfg)(http.HandlerFunc(h.Me)).ServeHTTP(rr, req)
-
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d — body: %s", rr.Code, rr.Body)
-	}
-
-	var dto auth.UserDTO
-	if err := json.NewDecoder(rr.Body).Decode(&dto); err != nil {
-		t.Fatal(err)
-	}
-	if dto.Username != "bob" || dto.ID != id {
-		t.Errorf("unexpected dto: %+v", dto)
 	}
 }

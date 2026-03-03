@@ -23,7 +23,7 @@ import (
 	"strings"
 	"testing"
 
-	"bookarr/internal/prowlarr"
+	"shelfarr/internal/prowlarr"
 )
 
 // integrationClient creates a real Prowlarr client from env vars.

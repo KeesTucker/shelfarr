@@ -54,6 +54,25 @@ func (db *DB) GetUserByID(ctx context.Context, id string) (*User, error) {
 	return scanUser(row)
 }
 
+// UpsertABSUser inserts or updates the local user record for an
+// AudioBookShelf-authenticated user, keyed by ABS user ID.
+// password_hash is stored as an empty string because authentication is
+// fully delegated to ABS; the local record exists only for request tracking.
+func (db *DB) UpsertABSUser(ctx context.Context, absID, username, role string) error {
+	_, err := db.ExecContext(ctx, `
+		INSERT INTO users (id, username, password_hash, role)
+		VALUES (?, ?, '', ?)
+		ON CONFLICT(id) DO UPDATE SET
+			username = excluded.username,
+			role     = excluded.role`,
+		absID, username, role,
+	)
+	if err != nil {
+		return fmt.Errorf("upsert abs user: %w", err)
+	}
+	return nil
+}
+
 // CountUsers returns the total number of users in the database.
 func (db *DB) CountUsers(ctx context.Context) (int, error) {
 	var n int

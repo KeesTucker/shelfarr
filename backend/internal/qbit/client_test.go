@@ -109,7 +109,7 @@ func TestAddTorrentMagnet(t *testing.T) {
 	srv := fakeQBit(t, nil)
 
 	c := New(srv.URL, "admin", "pass")
-	hash, err := c.AddTorrent(context.Background(), magnet, "/downloads")
+	hash, err := c.AddTorrent(context.Background(), magnet, "/downloads", "")
 	if err != nil {
 		t.Fatalf("AddTorrent: %v", err)
 	}
@@ -121,7 +121,7 @@ func TestAddTorrentMagnet(t *testing.T) {
 func TestAddTorrentQBitDown(t *testing.T) {
 	c := New("http://127.0.0.1:1", "admin", "pass")
 	_, err := c.AddTorrent(context.Background(),
-		"magnet:?xt=urn:btih:aabbccddeeff00112233445566778899aabbccdd", "/dl")
+		"magnet:?xt=urn:btih:aabbccddeeff00112233445566778899aabbccdd", "/dl", "")
 	if err == nil {
 		t.Fatal("expected error when qBit is unreachable")
 	}
@@ -129,7 +129,7 @@ func TestAddTorrentQBitDown(t *testing.T) {
 
 func TestAddTorrentNotConfigured(t *testing.T) {
 	c := New("", "admin", "pass")
-	_, err := c.AddTorrent(context.Background(), "magnet:?xt=urn:btih:abc", "/dl")
+	_, err := c.AddTorrent(context.Background(), "magnet:?xt=urn:btih:abc", "/dl", "")
 	if err == nil {
 		t.Fatal("expected error when QBIT_URL is empty")
 	}

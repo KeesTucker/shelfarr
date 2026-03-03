@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"bookarr/internal/metadata"
+	"shelfarr/internal/metadata"
 )
 
 // ── sanitizeName ──────────────────────────────────────────────────────────────

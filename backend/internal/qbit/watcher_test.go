@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"bookarr/internal/db"
+	"shelfarr/internal/db"
 )
 
 // ── fake torrent getter ───────────────────────────────────────────────────────

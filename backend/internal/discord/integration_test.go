@@ -17,8 +17,8 @@ import (
 	"testing"
 	"time"
 
-	"bookarr/internal/discord"
-	"bookarr/internal/metadata"
+	"shelfarr/internal/discord"
+	"shelfarr/internal/metadata"
 )
 
 func webhookURL(t *testing.T) string {
@@ -38,7 +38,7 @@ func TestIntegration_Send(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	err := discord.Send(ctx, url, "📡 bookarr integration test — plain Send (ignore this message)")
+	err := discord.Send(ctx, url, "📡 shelfarr integration test — plain Send (ignore this message)")
 	if err != nil {
 		t.Fatalf("Send: %v", err)
 	}

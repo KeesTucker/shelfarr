@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"bookarr/internal/respond"
+	"shelfarr/internal/respond"
 )
 
 // Result is the normalised search result returned by GET /api/search.

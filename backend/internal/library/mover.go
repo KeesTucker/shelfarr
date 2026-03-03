@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"bookarr/internal/metadata"
+	"shelfarr/internal/metadata"
 )
 
 const defaultPollInterval = 60 * time.Second
