@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -147,7 +148,14 @@ func run() error {
 	r := buildRouter(database, cfg, tokenCfg, absClient, prowlarrClient, requestsHandler, cfg.StaticDir)
 
 	slog.Info("server listening", "port", cfg.Port)
-	return http.ListenAndServe(":"+cfg.Port, r)
+	srv := &http.Server{
+		Addr:         ":" + cfg.Port,
+		Handler:      r,
+		ReadTimeout:  30 * time.Second,
+		WriteTimeout: 30 * time.Second,
+		IdleTimeout:  120 * time.Second,
+	}
+	return srv.ListenAndServe()
 }
 
 // buildRouter wires all routes. Auth-protected routes are added in a sub-router
