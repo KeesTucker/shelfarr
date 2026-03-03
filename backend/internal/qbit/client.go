@@ -45,10 +45,18 @@ type Client struct {
 	baseURL  string
 	username string
 	password string
+	autoTMM  bool
 	http     *http.Client
 
 	mu     sync.Mutex
 	cookie *http.Cookie // SID session cookie
+}
+
+// SetAutoTMM enables Automatic Torrent Management. When enabled, torrents are
+// added with useAutoTMM=true and qBittorrent uses its category-based save path
+// rules, ignoring any savepath passed to AddTorrent.
+func (c *Client) SetAutoTMM(enabled bool) {
+	c.autoTMM = enabled
 }
 
 // New creates a qBittorrent client. baseURL must not have a trailing slash.
@@ -174,7 +182,11 @@ func (c *Client) postTorrent(ctx context.Context, downloadURL, savePath, categor
 	makeReq := func() (*http.Request, error) {
 		form := url.Values{}
 		form.Set("urls", downloadURL)
-		form.Set("savepath", savePath)
+		if c.autoTMM {
+			form.Set("useAutoTMM", "true")
+		} else {
+			form.Set("savepath", savePath)
+		}
 		if category != "" {
 			form.Set("category", category)
 		}
@@ -234,8 +246,14 @@ func (c *Client) fetchAndPostTorrent(ctx context.Context, downloadURL, savePath,
 	if _, err := fw.Write(torrentBytes); err != nil {
 		return fmt.Errorf("qbit upload torrent: write bytes: %w", err)
 	}
-	if err := mw.WriteField("savepath", savePath); err != nil {
-		return fmt.Errorf("qbit upload torrent: write savepath: %w", err)
+	if c.autoTMM {
+		if err := mw.WriteField("useAutoTMM", "true"); err != nil {
+			return fmt.Errorf("qbit upload torrent: write useAutoTMM: %w", err)
+		}
+	} else {
+		if err := mw.WriteField("savepath", savePath); err != nil {
+			return fmt.Errorf("qbit upload torrent: write savepath: %w", err)
+		}
 	}
 	if category != "" {
 		if err := mw.WriteField("category", category); err != nil {

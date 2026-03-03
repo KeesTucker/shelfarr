@@ -63,6 +63,24 @@ func TestParseTitle(t *testing.T) {
 			author:   "",
 			narrator: "",
 		},
+		{
+			// Inline language/format tag on the author segment.
+			raw:    "J K Rowling [ENG / MP3] - Harry Potter and the Sorcerer's Stone",
+			title:  "Harry Potter and the Sorcerer's Stone",
+			author: "J K Rowling",
+		},
+		{
+			// Inline tag at the end of the full title.
+			raw:    "J K Rowling - Harry Potter and the Sorcerer's Stone [ENG / MP3]",
+			title:  "Harry Potter and the Sorcerer's Stone",
+			author: "J K Rowling",
+		},
+		{
+			// Tag with only a language code.
+			raw:    "Terry Pratchett [ENG] - Guards! Guards!",
+			title:  "Guards! Guards!",
+			author: "Terry Pratchett",
+		},
 	}
 
 	for _, tc := range tests {

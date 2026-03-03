@@ -2,6 +2,7 @@ services:
   shelfarr:
     image: ghcr.io/keestucker/shelfarr:latest
     # build: .  # uncomment to build from source instead
+    user: "${PUID:-1000}:${PGID:-1000}"
     ports:
       - "8008:8008"
     volumes:
@@ -21,6 +22,7 @@ services:
       QBIT_USERNAME: ${QBIT_USERNAME}
       QBIT_PASSWORD: ${QBIT_PASSWORD}
       QBIT_CATEGORY: shelfarr
+      QBIT_AUTO_TMM: ${QBIT_AUTO_TMM:-false}
 
       # ── Library ───────────────────────────────────────────────────────────
       LIBRARY_DIR: /audiobooks
@@ -30,7 +32,7 @@ services:
       WATCH_TIMEOUT: 24h
 
       # ── AudioBookShelf ────────────────────────────────────────────────────
-      ABS_URL: ${ABS_URL:-http://audiobookshelf:13378}
+      ABS_URL: ${ABS_URL:-http://audiobookshelf:80}
 
       # ── Discord ───────────────────────────────────────────────────────────
       DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL:-}

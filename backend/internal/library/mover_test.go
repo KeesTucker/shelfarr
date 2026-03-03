@@ -287,9 +287,9 @@ func TestMove_HappyPath(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(finalPath, "ch1.mp3")); err != nil {
 		t.Errorf("ch1.mp3 not at destination: %v", err)
 	}
-	// Source removed.
-	if _, err := os.Stat(src); !os.IsNotExist(err) {
-		t.Error("source should have been removed after move")
+	// Source must still exist (link, not move).
+	if _, err := os.Stat(src); err != nil {
+		t.Errorf("source should still exist after link: %v", err)
 	}
 }
 

@@ -57,6 +57,7 @@ func run() error {
 	absClient := abs.New(cfg.ABSURL)
 	prowlarrClient := prowlarr.New(cfg.ProwlarrURL, cfg.ProwlarrAPIKey)
 	qbitClient := qbit.New(cfg.QBitURL, cfg.QBitUsername, cfg.QBitPassword)
+	qbitClient.SetAutoTMM(cfg.QBitAutoTMM)
 
 	// Context cancelled on SIGINT/SIGTERM for clean goroutine shutdown.
 	ctx, cancel := context.WithCancel(context.Background())

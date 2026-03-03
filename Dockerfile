@@ -25,13 +25,20 @@ FROM alpine:latest
 
 RUN apk --no-cache add ca-certificates tzdata
 
+# Create a non-root user/group. The UID/GID can be overridden at runtime via
+# the compose `user:` field (e.g. PUID=2000 PGID=2000).
+RUN addgroup -S -g 1000 shelfarr \
+ && adduser  -S -u 1000 -G shelfarr shelfarr
+
 WORKDIR /app
 COPY --from=backend /build/shelfarr .
 COPY --from=frontend /build/dist ./static
+RUN chown -R shelfarr:shelfarr /app
 
 EXPOSE 8008
 
 # SQLite database is stored here; mount a named volume to persist it.
 VOLUME ["/data"]
 
+USER shelfarr
 CMD ["./shelfarr"]

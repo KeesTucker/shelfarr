@@ -11,6 +11,7 @@
 		title: string;
 		author: string;
 		narrator?: string;
+		tags?: string[];
 		size: number;
 		seeders: number;
 		indexer: string;
@@ -168,6 +169,13 @@
 							<td class="px-4 py-3">
 								<div class="font-medium text-zinc-100 leading-snug">{result.title}</div>
 								<div class="text-xs text-zinc-400 mt-0.5">{result.author}</div>
+								{#if result.tags?.length}
+									<div class="flex flex-wrap gap-1 mt-1.5">
+										{#each result.tags as tag}
+											<span class="inline-block rounded px-1.5 py-0.5 text-[10px] font-mono font-medium bg-zinc-800 text-zinc-400 border border-zinc-700">{tag}</span>
+										{/each}
+									</div>
+								{/if}
 							</td>
 							<td class="px-4 py-3 text-xs text-zinc-400 hidden sm:table-cell">
 								{result.narrator ?? '—'}
@@ -207,7 +215,17 @@
 					<span class="block text-[10px] uppercase tracking-widest text-zinc-500 mb-0.5">Author</span>
 					<span class="block text-sm text-zinc-200">{selected.author}</span>
 				</div>
-				{#if selected.narrator}
+				{#if selected.tags?.length}
+				<div>
+					<span class="block text-[10px] uppercase tracking-widest text-zinc-500 mb-1">Format</span>
+					<div class="flex flex-wrap gap-1">
+						{#each selected.tags as tag}
+							<span class="inline-block rounded px-1.5 py-0.5 text-[10px] font-mono font-medium bg-zinc-700 text-zinc-300 border border-zinc-600">{tag}</span>
+						{/each}
+					</div>
+				</div>
+			{/if}
+			{#if selected.narrator}
 					<div>
 						<span class="block text-[10px] uppercase tracking-widest text-zinc-500 mb-0.5"
 							>Narrator</span

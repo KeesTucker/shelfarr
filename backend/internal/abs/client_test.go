@@ -11,7 +11,7 @@ import (
 	"shelfarr/internal/abs"
 )
 
-// fakeABS builds a test server that handles POST /api/login.
+// fakeABS builds a test server that handles POST /login (the ABS auth endpoint).
 // respondWith controls what the fake ABS returns.
 func fakeABS(t *testing.T, handler http.HandlerFunc) *httptest.Server {
 	t.Helper()

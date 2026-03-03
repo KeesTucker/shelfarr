@@ -13,15 +13,16 @@ import (
 
 // Result is the normalised search result returned by GET /api/search.
 type Result struct {
-	ID          string `json:"id"`
-	Title       string `json:"title"`
-	Author      string `json:"author"`
-	Narrator    string `json:"narrator"`
-	Size        int64  `json:"size"`
-	Seeders     int    `json:"seeders"`
-	Indexer     string `json:"indexer"`
-	PublishDate string `json:"publishDate"`
-	DownloadURL string `json:"downloadUrl"`
+	ID          string   `json:"id"`
+	Title       string   `json:"title"`
+	Author      string   `json:"author"`
+	Narrator    string   `json:"narrator"`
+	Tags        []string `json:"tags"`
+	Size        int64    `json:"size"`
+	Seeders     int      `json:"seeders"`
+	Indexer     string   `json:"indexer"`
+	PublishDate string   `json:"publishDate"`
+	DownloadURL string   `json:"downloadUrl"`
 }
 
 // Handler handles /api/search.
@@ -62,6 +63,7 @@ func rank(releases []Release) []Result {
 
 	items := make([]scored, 0, len(releases))
 	for _, r := range releases {
+		tags := extractTags(r.Title)
 		title, author, narrator := parseTitle(r.Title)
 
 		score := r.Seeders
@@ -82,6 +84,7 @@ func rank(releases []Release) []Result {
 				Title:       title,
 				Author:      author,
 				Narrator:    narrator,
+				Tags:        tags,
 				Size:        r.Size,
 				Seeders:     r.Seeders,
 				Indexer:     r.Indexer,
@@ -110,6 +113,27 @@ var knownSuffixes = []string{
 	"[audiobook]", "[audio book]", "[unabridged]", "(unabridged)",
 	"[abridged]", "(abridged)", "[m4b]", "[mp3]", "[flac]", "[aac]",
 	"[m4a]", "[ogg]", "[opus]", "[retail]", "[retail audio]",
+}
+
+// inlineTagRe matches bracket/paren tags that consist entirely of uppercase
+// letters, digits, slashes, and spaces — e.g. [ENG / MP3], [ENG], (FLAC).
+// These are language/format annotations, not part of the title or author name.
+var inlineTagRe = regexp.MustCompile(`\s*[\[(][A-Z][A-Z0-9 /]*[\])]`)
+
+// extractTags returns the content of all inline tags found in s, with brackets
+// stripped — e.g. "[ENG / MP3]" becomes "ENG / MP3".
+func extractTags(s string) []string {
+	matches := inlineTagRe.FindAllString(s, -1)
+	tags := make([]string, 0, len(matches))
+	for _, m := range matches {
+		m = strings.TrimSpace(m)
+		m = strings.Trim(m, "[(])")
+		m = strings.TrimSpace(m)
+		if m != "" {
+			tags = append(tags, m)
+		}
+	}
+	return tags
 }
 
 // narratorPhraseRe matches "narrated by X", "read by X", "narrator: X".
@@ -174,6 +198,8 @@ func stripSuffixes(s string) string {
 			lower = strings.ToLower(s)
 		}
 	}
+	// Strip inline language/format tags from anywhere in the string.
+	s = inlineTagRe.ReplaceAllString(s, "")
 	return strings.TrimSpace(s)
 }
 

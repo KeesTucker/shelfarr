@@ -23,6 +23,7 @@ type Config struct {
 	QBitUsername string
 	QBitPassword string
 	QBitCategory string
+	QBitAutoTMM  bool
 
 	// Library
 	// WatchDir is the local path where completed files appear (either directly
@@ -79,6 +80,7 @@ func Load() (*Config, error) {
 		QBitUsername:      getenv("QBIT_USERNAME", "admin"),
 		QBitPassword:      getenv("QBIT_PASSWORD", ""),
 		QBitCategory:      getenv("QBIT_CATEGORY", ""),
+		QBitAutoTMM:       os.Getenv("QBIT_AUTO_TMM") == "true",
 		WatchDir:          getenv("WATCH_DIR", ""),
 		LibraryDir:        getenv("LIBRARY_DIR", "/audiobooks"),
 		WatchTimeout:      watchTimeout,

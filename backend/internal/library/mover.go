@@ -59,13 +59,13 @@ func (m *Mover) Move(ctx context.Context, torrentName string, book *metadata.Boo
 	}
 
 	dest := filepath.Join(destDir, filepath.Base(src))
-	slog.Info("library: moving files", "src", src, "dest", dest)
+	slog.Info("library: linking files", "src", src, "dest", dest)
 
-	if err := moveAll(src, dest); err != nil {
-		return "", fmt.Errorf("library: move: %w", err)
+	if err := linkAll(src, dest); err != nil {
+		return "", fmt.Errorf("library: link: %w", err)
 	}
 
-	slog.Info("library: move complete", "dest", dest)
+	slog.Info("library: link complete", "dest", dest)
 	return dest, nil
 }
 
@@ -169,22 +169,34 @@ func sanitizeName(s string) string {
 
 // ── file operations ───────────────────────────────────────────────────────────
 
-// moveAll moves src to dst. It first attempts os.Rename (atomic on same
-// device); on failure (e.g. cross-device) it falls back to a recursive copy
-// followed by deletion of the source.
-func moveAll(src, dst string) error {
-	if err := os.Rename(src, dst); err == nil {
+// linkAll hard-links src to dst without removing the source. For files it
+// tries os.Link first (instant, same device); on failure it falls back to
+// copyFile. For directories it recurses, preserving structure.
+func linkAll(src, dst string) error {
+	info, err := os.Stat(src)
+	if err != nil {
+		return err
+	}
+	if info.IsDir() {
+		if err := os.MkdirAll(dst, info.Mode()); err != nil {
+			return err
+		}
+		entries, err := os.ReadDir(src)
+		if err != nil {
+			return err
+		}
+		for _, e := range entries {
+			if err := linkAll(filepath.Join(src, e.Name()), filepath.Join(dst, e.Name())); err != nil {
+				return err
+			}
+		}
 		return nil
 	}
-	// Cross-device or other rename failure: copy then delete.
-	if err := copyAll(src, dst); err != nil {
-		return fmt.Errorf("copy: %w", err)
+	// Single file: hard link if possible, copy otherwise.
+	if err := os.Link(src, dst); err == nil {
+		return nil
 	}
-	if err := os.RemoveAll(src); err != nil {
-		// Source cleanup failure is non-fatal: files are already at destination.
-		slog.Warn("library: failed to remove source after copy", "src", src, "err", err)
-	}
-	return nil
+	return copyFile(src, dst, info.Mode())
 }
 
 // copyAll recursively copies src to dst, preserving file modes.
