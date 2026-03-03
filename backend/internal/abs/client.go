@@ -24,7 +24,7 @@ type User struct {
 	Type string `json:"type"`
 }
 
-// Role maps the ABS user type to a Bookarr role string.
+// Role maps the ABS user type to a Shelfarr role string.
 func (u *User) Role() string {
 	if u.Type == "root" || u.Type == "admin" {
 		return "admin"

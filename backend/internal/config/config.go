@@ -34,9 +34,7 @@ type Config struct {
 	WatchTimeout time.Duration
 
 	// Audiobookshelf
-	ABSURL       string
-	ABSAPIKey    string
-	ABSLibraryID string
+	ABSURL string
 
 	// Discord
 	DiscordWebhookURL string
@@ -44,13 +42,6 @@ type Config struct {
 	// Auth
 	JWTSecret string
 	JWTExpiry time.Duration
-
-	// Admin seed — only needed on first startup when no users exist.
-	AdminUsername string
-	AdminPassword string
-
-	// Wizarr integration
-	ServiceToken string
 
 	// Server
 	Port      string
@@ -92,14 +83,9 @@ func Load() (*Config, error) {
 		LibraryDir:        getenv("LIBRARY_DIR", "/audiobooks"),
 		WatchTimeout:      watchTimeout,
 		ABSURL:            absURL,
-		ABSAPIKey:         getenv("ABS_API_KEY", ""),
-		ABSLibraryID:      getenv("ABS_LIBRARY_ID", ""),
 		DiscordWebhookURL: getenv("DISCORD_WEBHOOK_URL", ""),
 		JWTSecret:         jwtSecret,
 		JWTExpiry:         jwtExpiry,
-		AdminUsername:     getenv("ADMIN_USERNAME", "admin"),
-		AdminPassword:     getenv("ADMIN_PASSWORD", ""),
-		ServiceToken:      getenv("SERVICE_TOKEN", ""),
 		Port:              getenv("PORT", "8008"),
 		StaticDir:         getenv("STATIC_DIR", "/app/static"),
 	}, nil

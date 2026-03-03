@@ -18,7 +18,7 @@ RUN go mod download
 
 COPY backend/ ./
 
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o bookarr ./cmd/server/
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o shelfarr ./cmd/server/
 
 # Stage 3 — Minimal runtime image
 FROM alpine:latest
@@ -26,7 +26,7 @@ FROM alpine:latest
 RUN apk --no-cache add ca-certificates tzdata
 
 WORKDIR /app
-COPY --from=backend /build/bookarr .
+COPY --from=backend /build/shelfarr .
 COPY --from=frontend /build/dist ./static
 
 EXPOSE 8008
@@ -34,4 +34,4 @@ EXPOSE 8008
 # SQLite database is stored here; mount a named volume to persist it.
 VOLUME ["/data"]
 
-CMD ["./bookarr"]
+CMD ["./shelfarr"]

@@ -30,7 +30,7 @@
 	<Card class="w-full max-w-sm p-8">
 		<CardHeader>
 			<div class="mb-3 text-4xl select-none">📚</div>
-			<h1 class="text-2xl font-bold text-zinc-50">Bookarr</h1>
+			<h1 class="text-2xl font-bold text-zinc-50">Shelfarr</h1>
 			<p class="mt-1 text-sm text-zinc-400">Sign in with your AudioBookShelf account</p>
 			<p class="mt-0.5 text-sm text-zinc-500">Made with love &amp; too much AI for Amelie</p>
 		</CardHeader>

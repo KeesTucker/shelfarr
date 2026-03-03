@@ -1,6 +1,12 @@
 /.claude/*
-/.idea/*
+.idea/
 /backend/.run/*
 /backend/temp/*
 /backend/server.exe
 /frontend/.svelte-kit/*
+/frontend/dist/
+node_modules/
+.env
+*.log
+.DS_Store
+*.local

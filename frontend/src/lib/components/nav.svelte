@@ -10,7 +10,7 @@
 		<!-- Brand -->
 		<div class="flex items-center gap-2 select-none">
 			<span aria-hidden="true" class="text-xl">📚</span>
-			<span class="font-bold text-zinc-50">Bookarr</span>
+			<span class="font-bold text-zinc-50">Shelfarr</span>
 		</div>
 
 		<!-- Right side -->

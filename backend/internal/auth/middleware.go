@@ -55,27 +55,6 @@ func RequireAdmin(next http.Handler) http.Handler {
 	})
 }
 
-// RequireServiceToken is a middleware that validates requests carrying the
-// shared service token used by Wizarr (and similar integrations) instead of a
-// user JWT. The token must arrive as "Authorization: Bearer <SERVICE_TOKEN>".
-// Returns 503 if the token is not configured server-side so that callers get
-// a clear signal rather than a generic 401/403.
-func RequireServiceToken(token string) func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if token == "" {
-				http.Error(w, "service token not configured", http.StatusServiceUnavailable)
-				return
-			}
-			if extractBearer(r) != token {
-				http.Error(w, "forbidden", http.StatusForbidden)
-				return
-			}
-			next.ServeHTTP(w, r)
-		})
-	}
-}
-
 func extractBearer(r *http.Request) string {
 	token, found := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
 	if !found {
