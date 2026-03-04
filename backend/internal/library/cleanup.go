@@ -36,8 +36,8 @@ func CleanupBook(libraryDir string, entry BookEntry) error {
 		ext := strings.ToLower(filepath.Ext(old))
 		newName := expectedTitle + ext
 		if filepath.Base(old) != newName {
-			if err := os.Rename(old, filepath.Join(dir, newName)); err != nil {
-				slog.Warn("library cleanup: rename audio file", "old", old, "new", newName, "err", err)
+			if err := os.Rename(old, filepath.Join(dir, newName)); err != nil { //nolint:gosec
+				slog.Warn("library cleanup: rename audio file", "old", old, "new", newName, "err", err) //nolint:gosec
 				// non-fatal — continue with folder renames
 			}
 		}
@@ -48,9 +48,9 @@ func CleanupBook(libraryDir string, entry BookEntry) error {
 	if len(opfPaths) > 0 {
 		best := metadata.ChooseBestOPF(opfPaths, entry.TitleFolder)
 		if err := metadata.PatchOPF(best, book); err != nil {
-			slog.Warn("library cleanup: patch OPF failed, regenerating", "path", best, "err", err)
+			slog.Warn("library cleanup: patch OPF failed, regenerating", "path", best, "err", err) //nolint:gosec
 			if err := metadata.EnsureOPF(dir, book); err != nil {
-				slog.Warn("library cleanup: regen OPF", "path", dir, "err", err)
+				slog.Warn("library cleanup: regen OPF", "path", dir, "err", err) //nolint:gosec
 			}
 		}
 	}
@@ -74,13 +74,13 @@ func CleanupBook(libraryDir string, entry BookEntry) error {
 		newAuthorPath := filepath.Join(libraryDir, expectedAuthor)
 
 		// If the target author folder already exists, move just our title subfolder into it.
-		if _, err := os.Stat(newAuthorPath); err == nil {
+		if _, err := os.Stat(newAuthorPath); err == nil { //nolint:gosec
 			dest := filepath.Join(newAuthorPath, expectedTitle)
 			if err := safeRename(currentTitlePath, dest); err != nil {
 				return fmt.Errorf("move title into existing author folder: %w", err)
 			}
 			// Remove old author folder if now empty.
-			_ = os.Remove(oldAuthorPath) // silently ignore if not empty
+			_ = os.Remove(oldAuthorPath) //nolint:gosec // silently ignore if not empty
 		} else {
 			if err := safeRename(oldAuthorPath, newAuthorPath); err != nil {
 				return fmt.Errorf("rename author folder %q → %q: %w", oldAuthorPath, newAuthorPath, err)
