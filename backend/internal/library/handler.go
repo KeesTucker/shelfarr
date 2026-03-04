@@ -62,6 +62,19 @@ func (h *Handler) Cleanup(w http.ResponseWriter, r *http.Request) {
 	respond.JSON(w, http.StatusOK, cleanupResponse{Cleaned: cleaned, Errors: errs})
 }
 
+// Prune handles POST /api/library/prune. Removes empty directories from the
+// library tree and returns how many were deleted.
+func (h *Handler) Prune(w http.ResponseWriter, r *http.Request) {
+	removed, err := pruneEmptyDirs(h.libraryDir)
+	if err != nil {
+		respond.Error(w, http.StatusInternalServerError, "prune: "+err.Error())
+		return
+	}
+	respond.JSON(w, http.StatusOK, struct {
+		Removed int `json:"removed"`
+	}{Removed: removed})
+}
+
 func (h *Handler) cleanupSingle(w http.ResponseWriter, author, title string) {
 	entries, err := ScanLibrary(h.libraryDir)
 	if err != nil {

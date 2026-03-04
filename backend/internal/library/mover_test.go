@@ -237,7 +237,7 @@ func TestLinkFlat_NestedDirs(t *testing.T) {
 	}
 }
 
-func TestLinkFlat_DuplicateNameSkipped(t *testing.T) {
+func TestLinkFlat_DuplicateNamePrefixed(t *testing.T) {
 	dir := t.TempDir()
 	src := filepath.Join(dir, "book")
 	dst := filepath.Join(dir, "dest")
@@ -250,7 +250,8 @@ func TestLinkFlat_DuplicateNameSkipped(t *testing.T) {
 	if err := os.MkdirAll(dst, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	// Same filename in two different subdirs.
+	// Same filename in two different subdirs — simulates multi-disc torrents
+	// that reuse track numbers (e.g. disc1/01.mp3, disc2/01.mp3).
 	if err := os.WriteFile(filepath.Join(src, "disc1", "cover.jpg"), []byte("first"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -262,13 +263,119 @@ func TestLinkFlat_DuplicateNameSkipped(t *testing.T) {
 		t.Fatalf("linkFlat with duplicate: %v", err)
 	}
 
-	// First one wins; file must exist.
-	got, err := os.ReadFile(filepath.Join(dst, "cover.jpg"))
+	// Both occurrences must be prefixed with their parent directory name so
+	// that neither is silently treated as "the" canonical file.
+	got1, err := os.ReadFile(filepath.Join(dst, "disc1 - cover.jpg"))
+	if err != nil {
+		t.Fatalf("disc1 - cover.jpg missing: %v", err)
+	}
+	if string(got1) != "first" {
+		t.Errorf("disc1 - cover.jpg content=%q; want %q", got1, "first")
+	}
+
+	got2, err := os.ReadFile(filepath.Join(dst, "disc2 - cover.jpg"))
+	if err != nil {
+		t.Fatalf("disc2 - cover.jpg missing: %v", err)
+	}
+	if string(got2) != "second" {
+		t.Errorf("disc2 - cover.jpg content=%q; want %q", got2, "second")
+	}
+
+	// Unprefixed name must not exist.
+	if _, err := os.Stat(filepath.Join(dst, "cover.jpg")); err == nil {
+		t.Error("cover.jpg should not exist when duplicates are present")
+	}
+}
+
+func TestLinkFlat_TopLevelDuplicatePreserved(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "book")
+	dst := filepath.Join(dir, "dest")
+	if err := os.MkdirAll(filepath.Join(src, "disc1"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(dst, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Top-level cover.jpg alongside a disc subdirectory with its own cover.jpg.
+	if err := os.WriteFile(filepath.Join(src, "cover.jpg"), []byte("root"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(src, "disc1", "cover.jpg"), []byte("disc1"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := linkFlat(src, dst); err != nil {
+		t.Fatalf("linkFlat: %v", err)
+	}
+
+	// Top-level file keeps the unprefixed name.
+	got1, err := os.ReadFile(filepath.Join(dst, "cover.jpg"))
 	if err != nil {
 		t.Fatalf("cover.jpg missing: %v", err)
 	}
-	if string(got) != "first" {
-		t.Errorf("cover.jpg content=%q; want %q", got, "first")
+	if string(got1) != "root" {
+		t.Errorf("cover.jpg = %q; want %q", got1, "root")
+	}
+
+	// Subdirectory file is prefixed.
+	got2, err := os.ReadFile(filepath.Join(dst, "disc1 - cover.jpg"))
+	if err != nil {
+		t.Fatalf("disc1 - cover.jpg missing: %v", err)
+	}
+	if string(got2) != "disc1" {
+		t.Errorf("disc1 - cover.jpg = %q; want %q", got2, "disc1")
+	}
+}
+
+// ── pruneEmptyDirs ────────────────────────────────────────────────────────────
+
+func TestPruneEmptyDirs(t *testing.T) {
+	root := t.TempDir()
+
+	// Non-empty dir — must survive.
+	keepDir := filepath.Join(root, "Author", "Book With Files")
+	if err := os.MkdirAll(keepDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(keepDir, "chapter.mp3"), []byte("audio"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Deeply nested empty dirs — both should be removed cascading upward.
+	emptyDeep := filepath.Join(root, "Author", "Empty Book", "nested")
+	if err := os.MkdirAll(emptyDeep, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Standalone empty dir at author level.
+	emptyAuthor := filepath.Join(root, "Ghost Author")
+	if err := os.MkdirAll(emptyAuthor, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// 3 empty dirs: Ghost Author, Empty Book/nested, Empty Book (cascades after nested removed).
+	removed, err := pruneEmptyDirs(root)
+	if err != nil {
+		t.Fatalf("pruneEmptyDirs: %v", err)
+	}
+	if removed != 3 {
+		t.Errorf("removed=%d; want 3", removed)
+	}
+
+	// Root must still exist.
+	if _, err := os.Stat(root); err != nil {
+		t.Errorf("root removed unexpectedly: %v", err)
+	}
+	// Non-empty dir and its file must survive.
+	if _, err := os.Stat(filepath.Join(keepDir, "chapter.mp3")); err != nil {
+		t.Errorf("chapter.mp3 missing after prune: %v", err)
+	}
+	// All empty dirs must be gone.
+	for _, gone := range []string{emptyDeep, filepath.Join(root, "Author", "Empty Book"), emptyAuthor} {
+		if _, err := os.Stat(gone); err == nil {
+			t.Errorf("expected %q to be removed", gone)
+		}
 	}
 }
 

@@ -178,3 +178,85 @@ func TestHandlerCleanup_SingleScanError(t *testing.T) {
 		t.Errorf("expected 500 for scan error, got %d", rr.Code)
 	}
 }
+
+func TestHandlerPrune_RemovesEmpty(t *testing.T) {
+	libDir := t.TempDir()
+	// Create an empty author/book hierarchy alongside a non-empty book.
+	if err := os.MkdirAll(filepath.Join(libDir, "Ghost Author", "Empty Book"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	keepDir := filepath.Join(libDir, "Real Author", "Real Book")
+	if err := os.MkdirAll(keepDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(keepDir, "chapter.mp3"), []byte("audio"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	h := NewHandler(libDir)
+	req := httptest.NewRequest(http.MethodPost, "/api/library/prune", nil)
+	rr := httptest.NewRecorder()
+	h.Prune(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	var resp struct {
+		Removed int `json:"removed"`
+	}
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	// Ghost Author + Empty Book = 2 removed.
+	if resp.Removed != 2 {
+		t.Errorf("Removed=%d; want 2", resp.Removed)
+	}
+	// Empty dirs gone.
+	if _, err := os.Stat(filepath.Join(libDir, "Ghost Author")); err == nil {
+		t.Error("Ghost Author should have been removed")
+	}
+	// Non-empty dir preserved.
+	if _, err := os.Stat(keepDir); err != nil {
+		t.Errorf("Real Book dir should still exist: %v", err)
+	}
+}
+
+func TestHandlerPrune_NothingToRemove(t *testing.T) {
+	libDir := t.TempDir()
+	keepDir := filepath.Join(libDir, "Author", "Book")
+	if err := os.MkdirAll(keepDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(keepDir, "ch.mp3"), []byte("audio"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	h := NewHandler(libDir)
+	req := httptest.NewRequest(http.MethodPost, "/api/library/prune", nil)
+	rr := httptest.NewRecorder()
+	h.Prune(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+	var resp struct {
+		Removed int `json:"removed"`
+	}
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp.Removed != 0 {
+		t.Errorf("Removed=%d; want 0", resp.Removed)
+	}
+}
+
+func TestHandlerPrune_NonExistentLibrary(t *testing.T) {
+	h := NewHandler(filepath.Join(t.TempDir(), "no-such-dir"))
+	req := httptest.NewRequest(http.MethodPost, "/api/library/prune", nil)
+	rr := httptest.NewRecorder()
+	h.Prune(rr, req)
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("expected 500 for non-existent library dir, got %d", rr.Code)
+	}
+}
