@@ -19,11 +19,12 @@ type Config struct {
 	ProwlarrAPIKey string
 
 	// qBittorrent
-	QBitURL      string
-	QBitUsername string
-	QBitPassword string
-	QBitCategory string
-	QBitAutoTMM  bool
+	QBitURL                   string
+	QBitUsername              string
+	QBitPassword              string
+	QBitCategory              string
+	QBitAutoTMM               bool
+	QBitDeleteOnRequestDelete bool // QBIT_DELETE_ON_REQUEST_DELETE
 
 	// Library
 	// WatchDir is the local path where completed files appear (either directly
@@ -74,24 +75,25 @@ func Load() (*Config, error) {
 	}
 
 	return &Config{
-		DBPath:            getenv("DB_PATH", "/data/shelfarr.db"),
-		ProwlarrURL:       getenv("PROWLARR_URL", ""),
-		ProwlarrAPIKey:    getenv("PROWLARR_API_KEY", ""),
-		QBitURL:           getenv("QBIT_URL", ""),
-		QBitUsername:      getenv("QBIT_USERNAME", "admin"),
-		QBitPassword:      getenv("QBIT_PASSWORD", ""),
-		QBitCategory:      getenv("QBIT_CATEGORY", ""),
-		QBitAutoTMM:       os.Getenv("QBIT_AUTO_TMM") == "true",
-		WatchDir:          getenv("WATCH_DIR", ""),
-		LibraryDir:        getenv("LIBRARY_DIR", "/audiobooks"),
-		WatchTimeout:      watchTimeout,
-		ABSURL:            absURL,
-		DiscordWebhookURL: getenv("DISCORD_WEBHOOK_URL", ""),
-		JWTSecret:         jwtSecret,
-		JWTExpiry:         jwtExpiry,
-		CookieSecure:      os.Getenv("COOKIE_INSECURE") != "true",
-		Port:              getenv("PORT", "8008"),
-		StaticDir:         getenv("STATIC_DIR", "/app/static"),
+		DBPath:                    getenv("DB_PATH", "/data/shelfarr.db"),
+		ProwlarrURL:               getenv("PROWLARR_URL", ""),
+		ProwlarrAPIKey:            getenv("PROWLARR_API_KEY", ""),
+		QBitURL:                   getenv("QBIT_URL", ""),
+		QBitUsername:              getenv("QBIT_USERNAME", "admin"),
+		QBitPassword:              getenv("QBIT_PASSWORD", ""),
+		QBitCategory:              getenv("QBIT_CATEGORY", ""),
+		QBitAutoTMM:               os.Getenv("QBIT_AUTO_TMM") == "true",
+		QBitDeleteOnRequestDelete: os.Getenv("QBIT_DELETE_ON_REQUEST_DELETE") == "true",
+		WatchDir:                  getenv("WATCH_DIR", ""),
+		LibraryDir:                getenv("LIBRARY_DIR", "/audiobooks"),
+		WatchTimeout:              watchTimeout,
+		ABSURL:                    absURL,
+		DiscordWebhookURL:         getenv("DISCORD_WEBHOOK_URL", ""),
+		JWTSecret:                 jwtSecret,
+		JWTExpiry:                 jwtExpiry,
+		CookieSecure:              os.Getenv("COOKIE_INSECURE") != "true",
+		Port:                      getenv("PORT", "8008"),
+		StaticDir:                 getenv("STATIC_DIR", "/app/static"),
 	}, nil
 }
 

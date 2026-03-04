@@ -19,6 +19,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 		throw new Error(body.error ?? `HTTP ${res.status}`);
 	}
 
+	if (res.status === 204) return undefined as T;
 	return res.json() as Promise<T>;
 }
 
@@ -28,5 +29,8 @@ export const api = {
 	},
 	post<T>(path: string, body: unknown): Promise<T> {
 		return request<T>(path, { method: 'POST', body: JSON.stringify(body) });
+	},
+	delete<T = void>(path: string): Promise<T> {
+		return request<T>(path, { method: 'DELETE' });
 	},
 };

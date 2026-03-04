@@ -42,6 +42,7 @@ func TestProtectedRoutesRequireAuth(t *testing.T) {
 		{http.MethodPost, "/api/requests"},
 		{http.MethodGet, "/api/requests"},
 		{http.MethodGet, "/api/requests/some-id"},
+		{http.MethodDelete, "/api/requests/some-id"},
 		{http.MethodGet, "/api/watchdir"},
 		{http.MethodPost, "/api/import"},
 	}

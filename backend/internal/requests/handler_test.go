@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -63,6 +64,23 @@ func seedRequest(t *testing.T, d *db.DB, userID, title, author string) string {
 		Author:      author,
 		SearchQuery: title + " " + author,
 		Status:      db.StatusDownloading,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	return id
+}
+
+// seedDoneRequest inserts a request in "done" status and returns its ID.
+func seedDoneRequest(t *testing.T, d *db.DB, userID, title, author string) string {
+	t.Helper()
+	id := uuid.NewString()
+	if err := d.CreateRequest(context.Background(), &db.Request{
+		ID:          id,
+		UserID:      userID,
+		Title:       title,
+		Author:      author,
+		SearchQuery: title + " " + author,
+		Status:      db.StatusDone,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -584,5 +602,218 @@ func TestImportCreatesRequestAndRunsPipeline(t *testing.T) {
 	}
 	if saved.Status != db.StatusDone {
 		t.Errorf("status=%q want %q", saved.Status, db.StatusDone)
+	}
+}
+
+// ── Delete ────────────────────────────────────────────────────────────────────
+
+func TestDeleteOwnRequest(t *testing.T) {
+	d := openTestDB(t)
+	cfg := testTokenCfg()
+	aliceID := seedUser(t, d, "alice", "user")
+	reqID := seedDoneRequest(t, d, aliceID, "My Book", "Author")
+
+	h := requests.New(d, prowlarr.New("", ""), qbit.New("", "", ""), "/dl")
+	req := authReq(t, http.MethodDelete, "/api/requests/"+reqID, "", cfg, aliceID, "alice", "user")
+	req = withID(req, reqID)
+	rr := httptest.NewRecorder()
+	h.Delete(rr, req)
+
+	if rr.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d — body: %s", rr.Code, rr.Body)
+	}
+	// Row must be gone.
+	if _, err := d.GetRequest(context.Background(), reqID); !errors.Is(err, db.ErrNotFound) {
+		t.Errorf("expected ErrNotFound after delete, got %v", err)
+	}
+}
+
+func TestDeleteForbiddenForOtherUser(t *testing.T) {
+	d := openTestDB(t)
+	cfg := testTokenCfg()
+	aliceID := seedUser(t, d, "alice", "user")
+	bobID := seedUser(t, d, "bob", "user")
+	reqID := seedRequest(t, d, aliceID, "Alice Book", "Author")
+
+	h := requests.New(d, prowlarr.New("", ""), qbit.New("", "", ""), "/dl")
+	req := authReq(t, http.MethodDelete, "/api/requests/"+reqID, "", cfg, bobID, "bob", "user")
+	req = withID(req, reqID)
+	rr := httptest.NewRecorder()
+	h.Delete(rr, req)
+
+	if rr.Code != http.StatusForbidden {
+		t.Errorf("expected 403, got %d", rr.Code)
+	}
+}
+
+func TestDeleteAdminCanDeleteAnyRequest(t *testing.T) {
+	d := openTestDB(t)
+	cfg := testTokenCfg()
+	aliceID := seedUser(t, d, "alice", "user")
+	adminID := seedUser(t, d, "admin", "admin")
+	reqID := seedDoneRequest(t, d, aliceID, "Alice Book", "Author")
+
+	h := requests.New(d, prowlarr.New("", ""), qbit.New("", "", ""), "/dl")
+	req := authReq(t, http.MethodDelete, "/api/requests/"+reqID, "", cfg, adminID, "admin", "admin")
+	req = withID(req, reqID)
+	rr := httptest.NewRecorder()
+	h.Delete(rr, req)
+
+	if rr.Code != http.StatusNoContent {
+		t.Errorf("expected 204, got %d — body: %s", rr.Code, rr.Body)
+	}
+}
+
+func TestDeleteNotFound(t *testing.T) {
+	d := openTestDB(t)
+	cfg := testTokenCfg()
+	userID := seedUser(t, d, "alice", "user")
+
+	h := requests.New(d, prowlarr.New("", ""), qbit.New("", "", ""), "/dl")
+	req := authReq(t, http.MethodDelete, "/api/requests/doesnotexist", "", cfg, userID, "alice", "user")
+	req = withID(req, "doesnotexist")
+	rr := httptest.NewRecorder()
+	h.Delete(rr, req)
+
+	if rr.Code != http.StatusNotFound {
+		t.Errorf("expected 404, got %d", rr.Code)
+	}
+}
+
+func TestDeleteMovingRequestReturns409(t *testing.T) {
+	d := openTestDB(t)
+	cfg := testTokenCfg()
+	aliceID := seedUser(t, d, "alice", "user")
+
+	// Seed a request in "moving" status (goroutine actively processing).
+	reqID := uuid.NewString()
+	if err := d.CreateRequest(context.Background(), &db.Request{
+		ID:          reqID,
+		UserID:      aliceID,
+		Title:       "Moving Book",
+		Author:      "Author",
+		SearchQuery: "Moving Book Author",
+		Status:      db.StatusMoving,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	h := requests.New(d, prowlarr.New("", ""), qbit.New("", "", ""), "/dl")
+	req := authReq(t, http.MethodDelete, "/api/requests/"+reqID, "", cfg, aliceID, "alice", "user")
+	req = withID(req, reqID)
+	rr := httptest.NewRecorder()
+	h.Delete(rr, req)
+
+	if rr.Code != http.StatusConflict {
+		t.Errorf("expected 409, got %d — body: %s", rr.Code, rr.Body)
+	}
+	// Row must still exist.
+	if _, err := d.GetRequest(context.Background(), reqID); err != nil {
+		t.Errorf("expected request to still exist, got %v", err)
+	}
+}
+
+func TestDeleteDownloadingRequestBlocked(t *testing.T) {
+	d := openTestDB(t)
+	cfg := testTokenCfg()
+	aliceID := seedUser(t, d, "alice", "user")
+	reqID := seedRequest(t, d, aliceID, "My Book", "Author")
+
+	// deleteFromQBit disabled (default) → 409.
+	h := requests.New(d, prowlarr.New("", ""), qbit.New("", "", ""), "/dl")
+	req := authReq(t, http.MethodDelete, "/api/requests/"+reqID, "", cfg, aliceID, "alice", "user")
+	req = withID(req, reqID)
+	rr := httptest.NewRecorder()
+	h.Delete(rr, req)
+
+	if rr.Code != http.StatusConflict {
+		t.Errorf("expected 409, got %d — body: %s", rr.Code, rr.Body)
+	}
+	// Row must still exist.
+	if _, err := d.GetRequest(context.Background(), reqID); err != nil {
+		t.Errorf("expected request to still exist, got %v", err)
+	}
+}
+
+func TestDeleteDoneRequestRemovesTorrentWhenFlagEnabled(t *testing.T) {
+	d := openTestDB(t)
+	cfg := testTokenCfg()
+	aliceID := seedUser(t, d, "alice", "user")
+
+	const hash = "deadbeef1234567890abcdef12345678deadbeef"
+	var removedHash string
+
+	qbitSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v2/auth/login":
+			http.SetCookie(w, &http.Cookie{Name: "SID", Value: "sid"})
+			fmt.Fprint(w, "Ok.")
+		case "/api/v2/torrents/delete":
+			if err := r.ParseForm(); err != nil {
+				http.Error(w, "bad form", http.StatusBadRequest)
+				return
+			}
+			removedHash = r.FormValue("hashes")
+			w.WriteHeader(http.StatusOK)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(qbitSrv.Close)
+
+	reqID := uuid.NewString()
+	if err := d.CreateRequest(context.Background(), &db.Request{
+		ID:          reqID,
+		UserID:      aliceID,
+		Title:       "Done Book",
+		Author:      "Author",
+		SearchQuery: "Done Book Author",
+		TorrentHash: sql.NullString{String: hash, Valid: true},
+		Status:      db.StatusDone,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	qc := qbit.New(qbitSrv.URL, "admin", "pass")
+	h := requests.New(d, prowlarr.New("", ""), qc, "/dl")
+	requests.SetDeleteFromQBit(h, true)
+
+	req := authReq(t, http.MethodDelete, "/api/requests/"+reqID, "", cfg, aliceID, "alice", "user")
+	req = withID(req, reqID)
+	rr := httptest.NewRecorder()
+	h.Delete(rr, req)
+
+	if rr.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d — body: %s", rr.Code, rr.Body)
+	}
+	if removedHash != hash {
+		t.Errorf("qBit remove hash=%q want %q", removedHash, hash)
+	}
+	if _, err := d.GetRequest(context.Background(), reqID); !errors.Is(err, db.ErrNotFound) {
+		t.Errorf("expected ErrNotFound after delete, got %v", err)
+	}
+}
+
+func TestDeleteDownloadingRequestAlwaysBlocked(t *testing.T) {
+	// Downloading requests must be blocked regardless of the deleteFromQBit flag.
+	d := openTestDB(t)
+	cfg := testTokenCfg()
+	aliceID := seedUser(t, d, "alice", "user")
+	reqID := seedRequest(t, d, aliceID, "My Book", "Author")
+
+	h := requests.New(d, prowlarr.New("", ""), qbit.New("", "", ""), "/dl")
+	requests.SetDeleteFromQBit(h, true) // flag on — should still be blocked
+
+	req := authReq(t, http.MethodDelete, "/api/requests/"+reqID, "", cfg, aliceID, "alice", "user")
+	req = withID(req, reqID)
+	rr := httptest.NewRecorder()
+	h.Delete(rr, req)
+
+	if rr.Code != http.StatusConflict {
+		t.Errorf("expected 409, got %d — body: %s", rr.Code, rr.Body)
+	}
+	// Row must still exist.
+	if _, err := d.GetRequest(context.Background(), reqID); err != nil {
+		t.Errorf("expected request to still exist, got %v", err)
 	}
 }
