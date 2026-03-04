@@ -14,6 +14,10 @@ import (
 
 // absAuthenticator is the interface used to delegate login to AudioBookShelf.
 // *abs.Client satisfies it. Pass nil to fall back to local bcrypt auth.
+//
+// Note: ABS_URL is required by config.Load, so absAuth is always non-nil in
+// production. loginLocal is retained as a test seam only — tests pass nil here
+// to exercise auth logic without a real ABS instance.
 type absAuthenticator interface {
 	Login(ctx context.Context, username, password string) (*abs.User, error)
 }
@@ -110,6 +114,9 @@ func (h *Handler) loginABS(w http.ResponseWriter, r *http.Request, req loginRequ
 	})
 }
 
+// loginLocal is unreachable in production (ABS_URL is required at startup).
+// It exists as a test seam: tests pass absAuth=nil to exercise credential
+// validation and token issuance without a live ABS instance.
 func (h *Handler) loginLocal(w http.ResponseWriter, r *http.Request, req loginRequest) {
 	user, err := h.db.GetUserByUsername(r.Context(), req.Username)
 	if err != nil {
