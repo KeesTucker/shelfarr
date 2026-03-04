@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -60,19 +61,11 @@ func run() error {
 	qbitClient := qbit.New(cfg.QBitURL, cfg.QBitUsername, cfg.QBitPassword)
 	qbitClient.SetAutoTMM(cfg.QBitAutoTMM)
 
-	// Context cancelled on SIGINT/SIGTERM for clean goroutine shutdown.
+	// ctx is cancelled on SIGINT/SIGTERM to stop background goroutines.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-	go func() {
-		select {
-		case <-sigCh:
-			slog.Info("shutdown signal received")
-			cancel()
-		case <-ctx.Done():
-		}
-	}()
 
 	metaClient := metadata.New()
 
@@ -164,7 +157,31 @@ func run() error {
 		WriteTimeout: 30 * time.Second,
 		IdleTimeout:  120 * time.Second,
 	}
-	return srv.ListenAndServe()
+
+	srvErr := make(chan error, 1)
+	go func() { srvErr <- srv.ListenAndServe() }()
+
+	select {
+	case err := <-srvErr:
+		// Server stopped on its own (e.g. bind error) — not a clean shutdown.
+		if !errors.Is(err, http.ErrServerClosed) {
+			return err
+		}
+		return nil
+	case <-sigCh:
+		slog.Info("shutdown signal received")
+	}
+
+	// Cancel background goroutines (watcher, import pipeline).
+	cancel()
+
+	// Give in-flight HTTP requests up to 10 s to complete.
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer shutdownCancel()
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		slog.Error("server shutdown", "err", err)
+	}
+	return nil
 }
 
 // buildRouter wires all routes. Auth-protected routes are added in a sub-router
