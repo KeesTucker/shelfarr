@@ -1,5 +1,5 @@
 // Package library handles moving completed torrent files from a watch directory
-// to the audiobook library, applying Author/Title (Year) folder naming.
+// to the audiobook library, applying Author/Title folder naming.
 package library
 
 import (
@@ -11,7 +11,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"strconv"
 	"strings"
 	"time"
 
@@ -44,7 +43,7 @@ func New(watchDir, libraryDir string, timeout time.Duration) *Mover {
 
 // Move waits for torrentName to appear in the watch directory (with no active
 // Syncthing temp files), then links all files it contains (flattened, no
-// subdirectory nesting) into libraryDir/<Author>/<Title> (Year)/.
+// subdirectory nesting) into libraryDir/<Author>/<Title>/.
 // Returns the absolute path of that destination directory.
 func (m *Mover) Move(ctx context.Context, torrentName string, book *metadata.Book) (string, error) {
 	src := filepath.Join(m.watchDir, torrentName)
@@ -140,14 +139,9 @@ func isReady(path string) (bool, error) {
 
 // ── folder naming ─────────────────────────────────────────────────────────────
 
-// destSubpath returns the relative Author/Title (Year) path inside libraryDir.
+// destSubpath returns the relative Author/Title path inside libraryDir.
 func destSubpath(book *metadata.Book) string {
-	author := sanitizeName(book.Author)
-	title := sanitizeName(book.Title)
-	if book.Year > 0 {
-		return filepath.Join(author, title+" ("+strconv.Itoa(book.Year)+")")
-	}
-	return filepath.Join(author, title)
+	return filepath.Join(sanitizeName(book.Author), sanitizeName(book.Title))
 }
 
 // invalidChars matches characters that are invalid or unsafe in Linux path

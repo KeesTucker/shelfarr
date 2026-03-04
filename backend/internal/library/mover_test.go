@@ -55,24 +55,24 @@ func TestDestSubpath(t *testing.T) {
 		want string
 	}{
 		{
-			name: "full metadata with year",
+			name: "full metadata",
 			book: &metadata.Book{Title: "The Final Empire", Author: "Brandon Sanderson", Year: 2006},
-			want: filepath.Join("Brandon Sanderson", "The Final Empire (2006)"),
+			want: filepath.Join("Brandon Sanderson", "The Final Empire"),
 		},
 		{
-			name: "no year — year suffix omitted",
+			name: "no year",
 			book: &metadata.Book{Title: "Dune", Author: "Frank Herbert"},
 			want: filepath.Join("Frank Herbert", "Dune"),
 		},
 		{
 			name: "invalid chars in title and author are stripped",
 			book: &metadata.Book{Title: "Title: With Colon", Author: "Author/Slash", Year: 2000},
-			want: filepath.Join("AuthorSlash", "Title With Colon (2000)"),
+			want: filepath.Join("AuthorSlash", "Title With Colon"),
 		},
 		{
 			name: "empty author falls back to Unknown",
 			book: &metadata.Book{Title: "Some Book", Author: "", Year: 1999},
-			want: filepath.Join("Unknown", "Some Book (1999)"),
+			want: filepath.Join("Unknown", "Some Book"),
 		},
 		{
 			name: "empty title falls back to Unknown",
@@ -360,8 +360,8 @@ func TestMove_HappyPath(t *testing.T) {
 		t.Fatalf("Move: %v", err)
 	}
 
-	// Destination is the Author/Title (Year) dir; files are flattened into it.
-	wantPath := filepath.Join(libDir, "Brandon Sanderson", "The Final Empire (2006)")
+	// Destination is the Author/Title dir; files are flattened into it.
+	wantPath := filepath.Join(libDir, "Brandon Sanderson", "The Final Empire")
 	if finalPath != wantPath {
 		t.Errorf("finalPath=%q; want %q", finalPath, wantPath)
 	}
@@ -479,7 +479,7 @@ func TestMove_SingleFileTorrent(t *testing.T) {
 		t.Fatalf("Move single file: %v", err)
 	}
 
-	wantPath := filepath.Join(libDir, "Frank Herbert", "Dune (1965)")
+	wantPath := filepath.Join(libDir, "Frank Herbert", "Dune")
 	if finalPath != wantPath {
 		t.Errorf("finalPath=%q; want %q", finalPath, wantPath)
 	}
