@@ -193,6 +193,7 @@ func (c *Client) SetCategory(ctx context.Context, hash, category string) error {
 		}
 		return nil
 	}
+		return nil
 	}
 
 	if resp.StatusCode != http.StatusOK {
