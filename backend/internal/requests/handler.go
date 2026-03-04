@@ -29,6 +29,11 @@ type Handler struct {
 	qbit     *qbit.Client
 	category string // QBIT_CATEGORY (empty = uncategorised)
 
+	// deleteFromQBit controls whether deleting a "downloading" request also
+	// removes its torrent from qBittorrent (without deleting files). When
+	// false, deleting an active download returns 409 Conflict.
+	deleteFromQBit bool
+
 	// optional import fields — set via SetImportConfig.
 	ctx      context.Context // server lifetime context; cancelled on shutdown
 	watchDir string
@@ -46,6 +51,15 @@ func New(database *db.DB, p *prowlarr.Client, q *qbit.Client, category string) *
 		category: category,
 		launch:   func(f func()) { go f() },
 	}
+}
+
+// SetDeleteTorrentsOnRequestDelete controls whether deleting a request also
+// removes the associated torrent from qBittorrent (without deleting files).
+// Only applies to completed/failed requests — active downloads (status
+// "downloading") are always blocked from deletion regardless of this setting.
+// Default is false.
+func (h *Handler) SetDeleteTorrentsOnRequestDelete(enabled bool) {
+	h.deleteFromQBit = enabled
 }
 
 // SetImportConfig wires the optional file-import functionality.
@@ -256,6 +270,27 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	if claims.Role != "admin" && req.UserID != claims.UserID {
 		respond.Error(w, http.StatusForbidden, "forbidden")
 		return
+	}
+
+	switch req.Status {
+	case db.StatusMoving:
+		// A goroutine is actively moving files; blocking deletion avoids a
+		// silent update-on-deleted-row race.
+		respond.Error(w, http.StatusConflict, "request is currently being processed; wait for it to finish")
+		return
+	case db.StatusDownloading:
+		// The watcher is tracking this torrent; deleting the record mid-download
+		// would leave an orphaned torrent in qBittorrent with no DB entry.
+		respond.Error(w, http.StatusConflict, "request is currently downloading; wait for it to finish")
+		return
+	}
+
+	// Best-effort: remove the torrent from qBit when cleanup is enabled and
+	// the request has a known hash (covers done, failed).
+	if h.deleteFromQBit && req.TorrentHash.Valid {
+		if err := h.qbit.RemoveTorrent(r.Context(), req.TorrentHash.String); err != nil {
+			slog.Warn("delete request: remove torrent from qBit", "id", id, "hash", req.TorrentHash.String, "err", err) //nolint:gosec
+		}
 	}
 
 	if err := h.db.DeleteRequest(r.Context(), id); err != nil {

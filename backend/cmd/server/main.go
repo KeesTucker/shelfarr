@@ -171,6 +171,7 @@ func run() error {
 	}
 
 	requestsHandler := requests.New(database, prowlarrClient, qbitClient, cfg.QBitCategory)
+	requestsHandler.SetDeleteTorrentsOnRequestDelete(cfg.QBitDeleteOnRequestDelete)
 	requestsHandler.SetImportConfig(ctx, watchDir, onImportFn, onFail)
 	metaHandler := metadata.NewHandler(metaClient)
 
