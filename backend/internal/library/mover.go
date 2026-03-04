@@ -166,8 +166,8 @@ func sanitizeName(s string) string {
 // linkFlat links every regular file under src directly into dst, stripping all
 // subdirectory nesting. dst must already exist. For each file it tries
 // os.Link first (instant, same-device hard link) and falls back to copyFile.
-// Duplicate filenames (same base name from different subdirs) are skipped with
-// a warning rather than overwriting.
+// Duplicate filenames (same base name from different subdirs) are prefixed with
+// their parent directory name to avoid data loss in multi-disc audiobooks.
 func linkFlat(src, dst string) error {
 	info, err := os.Stat(src)
 	if err != nil {
