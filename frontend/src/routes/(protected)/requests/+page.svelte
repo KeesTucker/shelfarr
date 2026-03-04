@@ -155,6 +155,9 @@
 				<thead class="bg-zinc-900 border-b border-zinc-800">
 					<tr>
 						<th class="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wide"
+							>Status</th
+						>
+						<th class="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wide"
 							>Title / Author</th
 						>
 						{#if authStore.isAdmin}
@@ -163,9 +166,6 @@
 								>User</th
 							>
 						{/if}
-						<th class="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wide"
-							>Status</th
-						>
 						<th
 							class="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wide hidden sm:table-cell"
 							>Submitted</th
@@ -175,6 +175,9 @@
 				<tbody class="divide-y divide-zinc-800">
 					{#each requests as req (req.id)}
 						<tr class="bg-zinc-950 hover:bg-zinc-900 transition-colors">
+							<td class="px-4 py-3">
+								<Badge status={req.status} />
+							</td>
 							<td class="px-4 py-3">
 								<div class="font-medium text-zinc-100 leading-snug">{req.title}</div>
 								<div class="text-xs text-zinc-400 mt-0.5">{req.author}</div>
@@ -192,9 +195,6 @@
 									{req.username ?? '—'}
 								</td>
 							{/if}
-							<td class="px-4 py-3">
-								<Badge status={req.status} />
-							</td>
 							<td class="px-4 py-3 text-xs text-zinc-400 hidden sm:table-cell tabular-nums">
 								{formatDate(req.createdAt)}
 							</td>
