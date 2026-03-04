@@ -200,7 +200,7 @@
 		</p>
 		<div class="rounded-xl border border-zinc-800 overflow-hidden">
 			<div class="overflow-x-auto">
-			<table class="w-full min-w-105 text-sm">
+			<table class="w-full min-w-[420px] text-sm">
 				<thead class="bg-zinc-900 border-b border-zinc-800">
 					<tr>
 						<th class="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wide"
