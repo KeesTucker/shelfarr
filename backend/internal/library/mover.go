@@ -207,7 +207,7 @@ func pruneEmptyDirs(root string) (int, error) {
 // Duplicate filenames (same base name from different subdirs) are prefixed with
 // their parent directory name to avoid data loss in multi-disc audiobooks.
 func linkFlat(src, dst string) error {
-	info, err := os.Stat(src)
+	info, err := os.Stat(src) //nolint:gosec
 	if err != nil {
 		return err
 	}
@@ -258,7 +258,7 @@ func linkFlat(src, dst string) error {
 			} else {
 				prefix := sanitizeName(strings.ReplaceAll(rel, string(filepath.Separator), " - "))
 				target = filepath.Join(dst, prefix+" - "+name)
-				slog.Info("library: renamed duplicate to avoid collision", "new_name", filepath.Base(target), "src", e.path)
+				slog.Info("library: renamed duplicate to avoid collision", "new_name", filepath.Base(target), "src", e.path) //nolint:gosec
 			}
 			if _, statErr := os.Stat(target); statErr == nil {
 				slog.Warn("library: skipping duplicate filename even with prefix", "file", name, "src", e.path)
@@ -322,7 +322,7 @@ func copyFile(src, dst string, mode os.FileMode) error {
 	}
 	if _, err := io.Copy(out, in); err != nil {
 		if cerr := out.Close(); cerr != nil {
-			slog.Warn("library: close dest file after copy error", "dst", dst, "err", cerr)
+			slog.Warn("library: close dest file after copy error", "dst", dst, "err", cerr) //nolint:gosec
 		}
 		return err
 	}

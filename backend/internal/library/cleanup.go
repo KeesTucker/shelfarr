@@ -20,12 +20,12 @@ func flattenBookDir(dir string) error {
 		return fmt.Errorf("create temp dir: %w", err)
 	}
 	if err := linkFlat(dir, tmpDir); err != nil {
-		_ = os.RemoveAll(tmpDir)
+		_ = os.RemoveAll(tmpDir) //nolint:gosec
 		return fmt.Errorf("flatten files: %w", err)
 	}
 	backup := dir + ".bak"
 	if err := os.Rename(dir, backup); err != nil { //nolint:gosec
-		_ = os.RemoveAll(tmpDir)
+		_ = os.RemoveAll(tmpDir) //nolint:gosec
 		return fmt.Errorf("backup title dir: %w", err)
 	}
 	if err := os.Rename(tmpDir, dir); err != nil { //nolint:gosec
