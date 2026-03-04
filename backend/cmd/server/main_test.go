@@ -9,6 +9,7 @@ import (
 	"shelfarr/internal/abs"
 	"shelfarr/internal/auth"
 	"shelfarr/internal/db"
+	"shelfarr/internal/library"
 	"shelfarr/internal/metadata"
 	"shelfarr/internal/prowlarr"
 	"shelfarr/internal/qbit"
@@ -26,7 +27,8 @@ func newTestRouter(t *testing.T) (http.Handler, auth.TokenConfig) {
 	cfg := auth.TokenConfig{Secret: []byte("test-secret"), Expiry: time.Hour}
 	rh := requests.New(d, prowlarr.New("", ""), qbit.New("", "", ""), "")
 	mh := metadata.NewHandler(metadata.New())
-	return buildRouter(d, cfg, abs.New(""), prowlarr.New("", ""), rh, mh, t.TempDir()), cfg
+	lh := library.NewHandler(t.TempDir())
+	return buildRouter(d, cfg, abs.New(""), prowlarr.New("", ""), rh, mh, lh, t.TempDir()), cfg
 }
 
 // TestProtectedRoutesRequireAuth verifies every JWT-protected route returns
