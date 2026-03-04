@@ -22,7 +22,8 @@ services:
       QBIT_USERNAME: ${QBIT_USERNAME}
       QBIT_PASSWORD: ${QBIT_PASSWORD}
       QBIT_CATEGORY: shelfarr
-      QBIT_AUTO_TMM: ${QBIT_AUTO_TMM:-false}
+      QBIT_AUTO_TMM: "true"
+      QBIT_DELETE_ON_REQUEST_DELETE: ${QBIT_DELETE_ON_REQUEST_DELETE:-false}
 
       # ── Library ───────────────────────────────────────────────────────────
       LIBRARY_DIR: /audiobooks

@@ -6,3 +6,8 @@ package requests
 func SetLaunch(h *Handler, f func(func())) {
 	h.launch = f
 }
+
+// SetDeleteFromQBit overrides deleteFromQBit for testing.
+func SetDeleteFromQBit(h *Handler, enabled bool) {
+	h.deleteFromQBit = enabled
+}

@@ -148,6 +148,40 @@ func (c *Client) GetTorrent(ctx context.Context, hash string) (*TorrentInfo, err
 	return &torrents[0], nil
 }
 
+// RemoveTorrent removes a torrent from qBittorrent by infohash without
+// deleting the downloaded files. The qBittorrent delete endpoint is
+// idempotent — passing an unknown hash returns 200.
+func (c *Client) RemoveTorrent(ctx context.Context, hash string) error {
+	if c.baseURL == "" {
+		return fmt.Errorf("qbit: QBIT_URL is not configured")
+	}
+
+	makeReq := func() (*http.Request, error) {
+		form := url.Values{}
+		form.Set("hashes", hash)
+		form.Set("deleteFiles", "false")
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost,
+			c.baseURL+"/api/v2/torrents/delete",
+			strings.NewReader(form.Encode()))
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		return req, nil
+	}
+
+	resp, err := c.doWithAuth(ctx, makeReq)
+	if err != nil {
+		return fmt.Errorf("qbit remove torrent: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("qbit remove torrent: unexpected status %d", resp.StatusCode)
+	}
+	return nil
+}
+
 // GetDefaultSavePath returns the default download directory configured in
 // qBittorrent (Settings → Downloads → Default Save Path).
 func (c *Client) GetDefaultSavePath(ctx context.Context) (string, error) {
