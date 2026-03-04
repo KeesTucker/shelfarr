@@ -47,6 +47,9 @@ func TestProtectedRoutesRequireAuth(t *testing.T) {
 		{http.MethodDelete, "/api/requests/some-id"},
 		{http.MethodGet, "/api/watchdir"},
 		{http.MethodPost, "/api/import"},
+		{http.MethodGet, "/api/library"},
+		{http.MethodPost, "/api/library/cleanup"},
+		{http.MethodPost, "/api/library/prune"},
 	}
 
 	router, _ := newTestRouter(t)
@@ -72,6 +75,9 @@ func TestAdminOnlyRoutesRequireAdmin(t *testing.T) {
 	}{
 		{http.MethodGet, "/api/watchdir"},
 		{http.MethodPost, "/api/import"},
+		{http.MethodGet, "/api/library"},
+		{http.MethodPost, "/api/library/cleanup"},
+		{http.MethodPost, "/api/library/prune"},
 	}
 
 	router, cfg := newTestRouter(t)
@@ -94,13 +100,26 @@ func TestAdminOnlyRoutesRequireAdmin(t *testing.T) {
 	}
 }
 
-// TestLoginIsPublic confirms POST /api/auth/login does not require a token.
-func TestLoginIsPublic(t *testing.T) {
+// TestPublicRoutes confirms public endpoints do not require a token.
+func TestPublicRoutes(t *testing.T) {
+	routes := []struct {
+		method string
+		path   string
+	}{
+		{http.MethodPost, "/api/auth/login"},
+		{http.MethodPost, "/api/auth/logout"},
+	}
+
 	router, _ := newTestRouter(t)
-	req := httptest.NewRequest(http.MethodPost, "/api/auth/login", nil)
-	rr := httptest.NewRecorder()
-	router.ServeHTTP(rr, req)
-	if rr.Code == http.StatusUnauthorized {
-		t.Errorf("POST /api/auth/login should be public, got 401")
+
+	for _, tc := range routes {
+		t.Run(tc.method+" "+tc.path, func(t *testing.T) {
+			req := httptest.NewRequest(tc.method, tc.path, nil)
+			rr := httptest.NewRecorder()
+			router.ServeHTTP(rr, req)
+			if rr.Code == http.StatusUnauthorized {
+				t.Errorf("%s %s should be public, got 401", tc.method, tc.path)
+			}
+		})
 	}
 }
