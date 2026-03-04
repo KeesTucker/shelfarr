@@ -47,7 +47,10 @@ type cleanupResponse struct {
 func (h *Handler) Cleanup(w http.ResponseWriter, r *http.Request) {
 	var req cleanupRequest
 	if r.ContentLength > 0 {
-		_ = json.NewDecoder(r.Body).Decode(&req)
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			respond.Error(w, http.StatusBadRequest, "invalid request body")
+			return
+		}
 	}
 
 	if req.Author != "" && req.Title != "" {

@@ -153,6 +153,19 @@ func TestHandlerCleanup_SingleNotFound(t *testing.T) {
 	}
 }
 
+func TestHandlerCleanup_MalformedJSON(t *testing.T) {
+	h := NewHandler(t.TempDir())
+	body := `{not valid json`
+	req := httptest.NewRequest(http.MethodPost, "/api/library/cleanup", strings.NewReader(body))
+	req.ContentLength = int64(len(body))
+	rr := httptest.NewRecorder()
+	h.Cleanup(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for malformed JSON, got %d", rr.Code)
+	}
+}
+
 func TestHandlerCleanup_SingleScanError(t *testing.T) {
 	h := NewHandler(filepath.Join(t.TempDir(), "no-such-dir"))
 	body := `{"author":"Author","title":"Title"}`
