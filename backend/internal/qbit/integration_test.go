@@ -59,8 +59,7 @@ func TestIntegration_GetTorrentNotFound(t *testing.T) {
 }
 
 // TestIntegration_AddAndGetTorrent adds a magnet URI, retrieves the torrent
-// info, and logs the result. The torrent remains in qBittorrent after the
-// test; remove it manually if needed.
+// info, and logs the result. The torrent is removed from qBittorrent on cleanup.
 func TestIntegration_AddAndGetTorrent(t *testing.T) {
 	c := integrationClient(t)
 
@@ -72,6 +71,11 @@ func TestIntegration_AddAndGetTorrent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AddTorrent: %v", err)
 	}
+	t.Cleanup(func() {
+		if err := c.RemoveTorrent(context.Background(), hash); err != nil {
+			t.Logf("cleanup: RemoveTorrent: %v", err)
+		}
+	})
 	if hash != wantHash {
 		t.Errorf("hash=%q want %q", hash, wantHash)
 	}
@@ -96,4 +100,46 @@ func TestIntegration_AddAndGetTorrent(t *testing.T) {
 	}
 	t.Logf("torrent: name=%q state=%q progress=%.2f savePath=%q",
 		info.Name, info.State, info.Progress, info.SavePath)
+}
+
+// TestIntegration_SetCategory adds a torrent, sets its category via
+// SetCategory, and verifies qBittorrent accepts the call without error.
+func TestIntegration_SetCategory(t *testing.T) {
+	c := integrationClient(t)
+	ctx := context.Background()
+
+	const magnet = "magnet:?xt=urn:btih:aabbccddeeff00112233445566778899aabbccdd&dn=shelfarr-integration-test"
+	const hash = "aabbccddeeff00112233445566778899aabbccdd"
+	const category = "shelfarr-imported"
+
+	// Add the torrent (idempotent — qBit silently ignores duplicate adds).
+	if _, err := c.AddTorrent(ctx, magnet, savePath(), ""); err != nil {
+		t.Fatalf("AddTorrent: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := c.RemoveTorrent(ctx, hash); err != nil {
+			t.Logf("cleanup: RemoveTorrent: %v", err)
+		}
+	})
+
+	// Wait for the torrent to become visible.
+	var err error
+	for range 5 {
+		time.Sleep(time.Second)
+		_, err = c.GetTorrent(ctx, hash)
+		if err == nil {
+			break
+		}
+		if !errors.Is(err, qbit.ErrNotFound) {
+			t.Fatalf("GetTorrent: %v", err)
+		}
+	}
+	if err != nil {
+		t.Fatalf("torrent not visible after 5 retries: %v", err)
+	}
+
+	if err := c.SetCategory(ctx, hash, category); err != nil {
+		t.Fatalf("SetCategory: %v", err)
+	}
+	t.Logf("SetCategory(%q, %q) succeeded", hash, category)
 }
