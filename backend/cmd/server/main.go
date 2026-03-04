@@ -77,6 +77,9 @@ func run() error {
 
 	watchDir := cfg.WatchDir
 	if watchDir == "" {
+		if cfg.QBitAutoTMM {
+			return fmt.Errorf("WATCH_DIR must be set when QBIT_AUTO_TMM=true (qBittorrent routes files via category save paths, not the global default)")
+		}
 		wd, err := qbitClient.GetDefaultSavePath(ctx)
 		if err != nil {
 			return fmt.Errorf("WATCH_DIR not set and could not read save path from qBittorrent: %w", err)
@@ -148,7 +151,7 @@ func run() error {
 	}
 
 	requestsHandler := requests.New(database, prowlarrClient, qbitClient, cfg.QBitCategory)
-	requestsHandler.SetImportConfig(watchDir, onImportFn, onFail)
+	requestsHandler.SetImportConfig(ctx, watchDir, onImportFn, onFail)
 
 	r := buildRouter(database, tokenCfg, absClient, prowlarrClient, requestsHandler, cfg.StaticDir)
 

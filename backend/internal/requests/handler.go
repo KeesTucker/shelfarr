@@ -29,6 +29,7 @@ type Handler struct {
 	category string // QBIT_CATEGORY (empty = uncategorised)
 
 	// optional import fields — set via SetImportConfig.
+	ctx      context.Context // server lifetime context; cancelled on shutdown
 	watchDir string
 	onImport func(ctx context.Context, req *db.Request, torrentName string) error
 	onFail   func(ctx context.Context, req *db.Request, reason string)
@@ -47,13 +48,16 @@ func New(database *db.DB, p *prowlarr.Client, q *qbit.Client, category string) *
 }
 
 // SetImportConfig wires the optional file-import functionality.
-// watchDir is the directory to scan for untracked files; onImport runs the
-// move pipeline for each import; onFail is called (best-effort) on error.
+// ctx is the server lifetime context (cancelled on shutdown); watchDir is the
+// directory to scan for untracked files; onImport runs the move pipeline for
+// each import; onFail is called (best-effort) on error.
 func (h *Handler) SetImportConfig(
+	ctx context.Context,
 	watchDir string,
 	onImport func(ctx context.Context, req *db.Request, torrentName string) error,
 	onFail func(ctx context.Context, req *db.Request, reason string),
 ) {
+	h.ctx = ctx
 	h.watchDir = watchDir
 	h.onImport = onImport
 	h.onFail = onFail
@@ -313,10 +317,10 @@ func (h *Handler) Import(w http.ResponseWriter, r *http.Request) {
 
 // runImport launches the import pipeline in a background goroutine. It mirrors
 // the watcher's handleComplete pattern: onImport → StatusDone, or StatusFailed
-// + onFail on error. Uses context.Background() so the goroutine outlives the
-// originating HTTP request.
+// + onFail on error. Uses the server lifetime context so the goroutine is
+// cancelled on shutdown rather than being tied to the originating HTTP request.
 func (h *Handler) runImport(req *db.Request) {
-	ctx := context.Background()
+	ctx := h.ctx
 	h.launch(func() {
 		if err := h.onImport(ctx, req, req.TorrentName.String); err != nil {
 			slog.Error("import: pipeline failed", "request_id", req.ID, "err", err)

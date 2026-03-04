@@ -500,7 +500,7 @@ func TestListWatchDirFiltersKnown(t *testing.T) {
 	}
 
 	h := requests.New(d, prowlarr.New("", ""), qbit.New("", "", ""), "")
-	h.SetImportConfig(dir, nil, nil)
+	h.SetImportConfig(context.Background(), dir, nil, nil)
 
 	req := authReq(t, http.MethodGet, "/api/watchdir", "", cfg, adminID, "admin", "admin")
 	rr := httptest.NewRecorder()
@@ -549,7 +549,7 @@ func TestImportCreatesRequestAndRunsPipeline(t *testing.T) {
 	var pipelineCalled string // records the torrentName passed to onImport
 
 	h := requests.New(d, prowlarr.New("", ""), qbit.New("", "", ""), "")
-	h.SetImportConfig(t.TempDir(),
+	h.SetImportConfig(context.Background(), t.TempDir(),
 		func(_ context.Context, _ *db.Request, torrentName string) error {
 			pipelineCalled = torrentName
 			return nil

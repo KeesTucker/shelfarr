@@ -133,7 +133,8 @@
 			{results.length} result{results.length !== 1 ? 's' : ''}
 		</p>
 		<div class="rounded-xl border border-zinc-800 overflow-hidden">
-			<table class="w-full text-sm">
+			<div class="overflow-x-auto">
+			<table class="w-full min-w-[420px] text-sm">
 				<thead class="bg-zinc-900 border-b border-zinc-800">
 					<tr>
 						<th class="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wide"
@@ -195,6 +196,7 @@
 					{/each}
 				</tbody>
 			</table>
+			</div>
 		</div>
 	{/if}
 </main>
