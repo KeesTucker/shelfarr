@@ -3,12 +3,16 @@
 package metadata
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"html"
 	"log/slog"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"time"
 )
 
@@ -44,11 +48,33 @@ func New() *Client {
 // over nothing. The caller-supplied title and author are used as fallback
 // values when the source returns no data.
 func (c *Client) Resolve(ctx context.Context, title, author string) *Book {
-	ol, err := c.openLibrarySearch(ctx, title, author)
+	results, err := c.openLibraryDocs(ctx, title, author, 1)
 	if err != nil {
 		slog.Warn("metadata: OpenLibrary lookup failed", "title", title, "err", err)
+		return &Book{Title: title, Author: author}
 	}
-	return merge(title, author, ol)
+	if len(results) == 0 {
+		return &Book{Title: title, Author: author}
+	}
+	return merge(title, author, &results[0])
+}
+
+// Search queries OpenLibrary and returns up to 5 candidate Books for the user
+// to choose from. Returns nil (not an error) when no results are found.
+func (c *Client) Search(ctx context.Context, title, author string) ([]Book, error) {
+	docs, err := c.openLibraryDocs(ctx, title, author, 5)
+	if err != nil {
+		return nil, err
+	}
+	books := make([]Book, 0, len(docs))
+	for i := range docs {
+		books = append(books, Book{
+			Title:  docs[i].title,
+			Author: docs[i].author,
+			Year:   docs[i].year,
+		})
+	}
+	return books, nil
 }
 
 // JSON serialises the Book to a JSON string for storage in metadata_json.
@@ -58,6 +84,47 @@ func (b *Book) JSON() (string, error) {
 		return "", fmt.Errorf("marshal book: %w", err)
 	}
 	return string(raw), nil
+}
+
+// FromJSON deserialises a Book from a JSON string previously produced by JSON().
+func FromJSON(s string) (*Book, error) {
+	var b Book
+	if err := json.Unmarshal([]byte(s), &b); err != nil {
+		return nil, fmt.Errorf("unmarshal book: %w", err)
+	}
+	return &b, nil
+}
+
+// EnsureOPF writes a book.opf sidecar into dir if no *.opf file already
+// exists there. Non-fatal: callers should log and ignore errors.
+func EnsureOPF(dir string, book *Book) error {
+	matches, err := filepath.Glob(filepath.Join(dir, "*.opf"))
+	if err != nil {
+		return fmt.Errorf("glob opf: %w", err)
+	}
+	if len(matches) > 0 {
+		return nil // already present
+	}
+	return writeOPF(filepath.Join(dir, "book.opf"), book)
+}
+
+func writeOPF(path string, book *Book) error {
+	var buf bytes.Buffer
+	buf.WriteString(`<?xml version="1.0" encoding="UTF-8"?>` + "\n")
+	buf.WriteString(`<package xmlns="http://www.idpf.org/2007/opf" xmlns:opf="http://www.idpf.org/2007/opf" xmlns:dc="http://purl.org/dc/elements/1.1/" version="2.0" unique-identifier="uid">` + "\n")
+	buf.WriteString("  <metadata>\n")
+	// unique-identifier must match an id= on a dc:identifier element.
+	fmt.Fprintf(&buf, "    <dc:identifier id=\"uid\">%s</dc:identifier>\n",
+		html.EscapeString(book.Author+" - "+book.Title))
+	fmt.Fprintf(&buf, "    <dc:title>%s</dc:title>\n", html.EscapeString(book.Title))
+	fmt.Fprintf(&buf, "    <dc:creator opf:role=\"aut\">%s</dc:creator>\n", html.EscapeString(book.Author))
+	if book.Year > 0 {
+		fmt.Fprintf(&buf, "    <dc:date>%d-01-01</dc:date>\n", book.Year)
+	}
+	buf.WriteString("    <dc:language>en</dc:language>\n")
+	buf.WriteString("  </metadata>\n")
+	buf.WriteString("</package>\n")
+	return os.WriteFile(path, buf.Bytes(), 0o644) //nolint:gosec
 }
 
 // ── merge ─────────────────────────────────────────────────────────────────────
@@ -93,15 +160,13 @@ type olResponse struct {
 	} `json:"docs"`
 }
 
-// openLibrarySearch queries https://openlibrary.org/search.json by title and
-// author, returning the first matching result. Returns nil (not an error) when
-// no results are found.
-func (c *Client) openLibrarySearch(ctx context.Context, title, author string) (*olResult, error) {
+// openLibraryDocs queries OpenLibrary with the given limit and returns raw results.
+func (c *Client) openLibraryDocs(ctx context.Context, title, author string, limit int) ([]olResult, error) {
 	q := url.Values{
 		"title":  {title},
 		"author": {author},
 		"fields": {"title,author_name,first_publish_year"},
-		"limit":  {"1"},
+		"limit":  {fmt.Sprintf("%d", limit)},
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
 		c.openLibraryBase+"/search.json?"+q.Encode(), nil)
@@ -124,14 +189,14 @@ func (c *Client) openLibrarySearch(ctx context.Context, title, author string) (*
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 		return nil, fmt.Errorf("decode response: %w", err)
 	}
-	if len(body.Docs) == 0 {
-		return nil, nil // no results — not an error
-	}
 
-	doc := body.Docs[0]
-	r := &olResult{title: doc.Title, year: doc.FirstPublishYear}
-	if len(doc.AuthorName) > 0 {
-		r.author = doc.AuthorName[0]
+	results := make([]olResult, 0, len(body.Docs))
+	for _, doc := range body.Docs {
+		r := olResult{title: doc.Title, year: doc.FirstPublishYear}
+		if len(doc.AuthorName) > 0 {
+			r.author = doc.AuthorName[0]
+		}
+		results = append(results, r)
 	}
-	return r, nil
+	return results, nil
 }

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Search, Loader2 } from 'lucide-svelte';
+	import { Search, Loader2, Check } from 'lucide-svelte';
 	import { api } from '$lib/api';
 	import { formatSize } from '$lib/utils';
 	import { Button } from '$lib/components/ui/button';
@@ -18,6 +18,12 @@
 		publishDate?: string;
 	}
 
+	interface Book {
+		title: string;
+		author: string;
+		year?: number;
+	}
+
 	// Search state
 	let query = $state('');
 	let results = $state<SearchResult[]>([]);
@@ -30,6 +36,12 @@
 	let selected = $state<SearchResult | null>(null);
 	let dialogOpen = $state(false);
 	let requesting = $state(false);
+
+	// Metadata search state
+	let metaResults = $state<Book[]>([]);
+	let metaLoading = $state(false);
+	let selectedMeta = $state<Book | null>(null);
+	let metaSearchError = $state('');
 
 	// Toast state
 	let toast = $state<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -61,7 +73,33 @@
 
 	function openConfirm(result: SearchResult) {
 		selected = result;
+		metaResults = [];
+		selectedMeta = null;
+		metaSearchError = '';
 		dialogOpen = true;
+		searchMetadata(result.title, result.author);
+	}
+
+	async function searchMetadata(title: string, author: string) {
+		metaLoading = true;
+		try {
+			const books = await api.get<Book[]>(
+				`/api/metadata/search?title=${encodeURIComponent(title)}&author=${encodeURIComponent(author)}`
+			);
+			metaResults = books ?? [];
+		} catch {
+			metaSearchError = 'Metadata search failed';
+		} finally {
+			metaLoading = false;
+		}
+	}
+
+	function toggleMeta(book: Book) {
+		if (selectedMeta === book) {
+			selectedMeta = null;
+		} else {
+			selectedMeta = book;
+		}
 	}
 
 	async function handleRequest() {
@@ -73,6 +111,7 @@
 				title: selected.title,
 				author: selected.author,
 				torrentGuid: selected.id,
+				...(selectedMeta ? { metadata: selectedMeta } : {}),
 			});
 			dialogOpen = false;
 			showToast(`"${title}" added to download queue`, 'success');
@@ -208,7 +247,8 @@
 			<Dialog.Title>Confirm Download</Dialog.Title>
 			<Dialog.Description>This will add the torrent to the download queue.</Dialog.Description>
 
-			<div class="rounded-lg bg-zinc-800 p-4 space-y-3 mb-6">
+			<!-- Torrent info -->
+			<div class="rounded-lg bg-zinc-800 p-4 space-y-3">
 				<div>
 					<span class="block text-[10px] uppercase tracking-widest text-zinc-500 mb-0.5">Title</span>
 					<span class="block text-sm text-zinc-200">{selected.title}</span>
@@ -255,7 +295,59 @@
 				</div>
 			</div>
 
-			<div class="flex gap-3 justify-end">
+			<!-- Metadata section -->
+			<div class="mt-4">
+				<div class="flex items-center gap-2 mb-2">
+					<span class="text-[10px] uppercase tracking-widest text-zinc-500">Metadata</span>
+					{#if selectedMeta}
+						<span class="text-[10px] text-blue-400">selected — will be used for folder naming</span>
+					{:else}
+						<span class="text-[10px] text-zinc-600">optional — select a match or skip</span>
+					{/if}
+				</div>
+
+				{#if metaLoading}
+					<div class="flex items-center gap-2 py-3 text-xs text-zinc-500">
+						<Loader2 class="w-3 h-3 animate-spin" />
+						Searching for metadata…
+					</div>
+				{:else if metaSearchError}
+					<p class="text-xs text-zinc-600 py-2">{metaSearchError}</p>
+				{:else if metaResults.length === 0}
+					<p class="text-xs text-zinc-600 py-2">No metadata found — torrent title/author will be used.</p>
+				{:else}
+					<div class="space-y-2">
+						{#each metaResults as book (book.title + book.author)}
+							{@const isSelected = selectedMeta === book}
+							<button
+								type="button"
+								onclick={() => toggleMeta(book)}
+								class="w-full text-left rounded-lg p-3 transition-colors cursor-pointer
+									{isSelected
+										? 'bg-zinc-700 ring-1 ring-blue-500'
+										: 'bg-zinc-800 hover:bg-zinc-700'}"
+							>
+								<div class="flex items-start justify-between gap-2">
+									<div class="min-w-0">
+										<div class="text-sm text-zinc-200 font-medium leading-snug truncate">{book.title}</div>
+										<div class="text-xs text-zinc-400 mt-0.5 truncate">{book.author}</div>
+									</div>
+									<div class="flex items-center gap-2 shrink-0">
+										{#if book.year}
+											<span class="text-xs text-zinc-500">{book.year}</span>
+										{/if}
+										{#if isSelected}
+											<Check class="w-3.5 h-3.5 text-blue-400" />
+										{/if}
+									</div>
+								</div>
+							</button>
+						{/each}
+					</div>
+				{/if}
+			</div>
+
+			<div class="flex gap-3 justify-end mt-4">
 				<Dialog.Close>
 					<Button variant="outline" disabled={requesting}>Cancel</Button>
 				</Dialog.Close>
