@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -584,5 +585,80 @@ func TestImportCreatesRequestAndRunsPipeline(t *testing.T) {
 	}
 	if saved.Status != db.StatusDone {
 		t.Errorf("status=%q want %q", saved.Status, db.StatusDone)
+	}
+}
+
+// ── Delete ────────────────────────────────────────────────────────────────────
+
+func TestDeleteOwnRequest(t *testing.T) {
+	d := openTestDB(t)
+	cfg := testTokenCfg()
+	aliceID := seedUser(t, d, "alice", "user")
+	reqID := seedRequest(t, d, aliceID, "My Book", "Author")
+
+	h := requests.New(d, prowlarr.New("", ""), qbit.New("", "", ""), "/dl")
+	req := authReq(t, http.MethodDelete, "/api/requests/"+reqID, "", cfg, aliceID, "alice", "user")
+	req = withID(req, reqID)
+	rr := httptest.NewRecorder()
+	h.Delete(rr, req)
+
+	if rr.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d — body: %s", rr.Code, rr.Body)
+	}
+	// Row must be gone.
+	if _, err := d.GetRequest(context.Background(), reqID); !errors.Is(err, db.ErrNotFound) {
+		t.Errorf("expected ErrNotFound after delete, got %v", err)
+	}
+}
+
+func TestDeleteForbiddenForOtherUser(t *testing.T) {
+	d := openTestDB(t)
+	cfg := testTokenCfg()
+	aliceID := seedUser(t, d, "alice", "user")
+	bobID := seedUser(t, d, "bob", "user")
+	reqID := seedRequest(t, d, aliceID, "Alice Book", "Author")
+
+	h := requests.New(d, prowlarr.New("", ""), qbit.New("", "", ""), "/dl")
+	req := authReq(t, http.MethodDelete, "/api/requests/"+reqID, "", cfg, bobID, "bob", "user")
+	req = withID(req, reqID)
+	rr := httptest.NewRecorder()
+	h.Delete(rr, req)
+
+	if rr.Code != http.StatusForbidden {
+		t.Errorf("expected 403, got %d", rr.Code)
+	}
+}
+
+func TestDeleteAdminCanDeleteAnyRequest(t *testing.T) {
+	d := openTestDB(t)
+	cfg := testTokenCfg()
+	aliceID := seedUser(t, d, "alice", "user")
+	adminID := seedUser(t, d, "admin", "admin")
+	reqID := seedRequest(t, d, aliceID, "Alice Book", "Author")
+
+	h := requests.New(d, prowlarr.New("", ""), qbit.New("", "", ""), "/dl")
+	req := authReq(t, http.MethodDelete, "/api/requests/"+reqID, "", cfg, adminID, "admin", "admin")
+	req = withID(req, reqID)
+	rr := httptest.NewRecorder()
+	h.Delete(rr, req)
+
+	if rr.Code != http.StatusNoContent {
+		t.Errorf("expected 204, got %d — body: %s", rr.Code, rr.Body)
+	}
+}
+
+func TestDeleteNotFound(t *testing.T) {
+	d := openTestDB(t)
+	cfg := testTokenCfg()
+	userID := seedUser(t, d, "alice", "user")
+
+	h := requests.New(d, prowlarr.New("", ""), qbit.New("", "", ""), "/dl")
+	req := authReq(t, http.MethodDelete, "/api/requests/doesnotexist", "", cfg, userID, "alice", "user")
+	req = withID(req, "doesnotexist")
+	rr := httptest.NewRecorder()
+	h.Delete(rr, req)
+
+	if rr.Code != http.StatusNotFound {
+		t.Errorf("expected 404, got %d", rr.Code)
 	}
 }

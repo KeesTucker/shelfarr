@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
-	import { Loader2, FolderInput } from 'lucide-svelte';
+	import { Loader2, FolderInput, Trash2 } from 'lucide-svelte';
 	import { api } from '$lib/api';
 	import { authStore } from '$lib/auth.svelte';
 	import { formatDate } from '$lib/utils';
@@ -110,6 +110,22 @@
 		}
 	}
 
+	let deleting = $state<Set<string>>(new Set());
+
+	async function deleteRequest(req: Request) {
+		deleting = new Set([...deleting, req.id]);
+		try {
+			await api.delete(`/api/requests/${req.id}`);
+			requests = requests.filter((r) => r.id !== req.id);
+		} catch (e) {
+			showToast(e instanceof Error ? e.message : 'Failed to delete request', 'error');
+		} finally {
+			const next = new Set(deleting);
+			next.delete(req.id);
+			deleting = next;
+		}
+	}
+
 	function showToast(message: string, type: 'success' | 'error') {
 		if (toastTimeout !== null) clearTimeout(toastTimeout);
 		toast = { message, type };
@@ -170,6 +186,7 @@
 							class="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wide hidden sm:table-cell"
 							>Submitted</th
 						>
+						<th class="px-2 py-3"></th>
 					</tr>
 				</thead>
 				<tbody class="divide-y divide-zinc-800">
@@ -197,6 +214,16 @@
 							{/if}
 							<td class="px-4 py-3 text-xs text-zinc-400 hidden sm:table-cell tabular-nums">
 								{formatDate(req.createdAt)}
+							</td>
+							<td class="px-2 py-3">
+								<button
+									class="p-1.5 rounded text-zinc-600 hover:text-red-400 hover:bg-zinc-800 transition-colors disabled:opacity-40"
+									disabled={deleting.has(req.id)}
+									onclick={() => deleteRequest(req)}
+									title="Remove request"
+								>
+									<Trash2 class="w-3.5 h-3.5" />
+								</button>
 							</td>
 						</tr>
 					{/each}

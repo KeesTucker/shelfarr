@@ -232,6 +232,38 @@ func (db *DB) ListTorrentNames(ctx context.Context) ([]string, error) {
 	return names, rows.Err()
 }
 
+// FailStuckMovingRequests updates all requests in "moving" status to "failed".
+// Called on server startup: the goroutine that performs the file move dies with
+// the process, so any request left in "moving" after a restart will never
+// progress on its own.  Returns the number of rows affected.
+func (db *DB) FailStuckMovingRequests(ctx context.Context) (int64, error) {
+	res, err := db.ExecContext(ctx, `
+		UPDATE requests
+		SET status     = 'failed',
+		    error      = 'service restarted during file move',
+		    updated_at = CURRENT_TIMESTAMP
+		WHERE status = 'moving'`)
+	if err != nil {
+		return 0, fmt.Errorf("fail stuck moving requests: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	return n, nil
+}
+
+// DeleteRequest permanently removes a request row by ID. Returns ErrNotFound
+// if no row with that ID exists.
+func (db *DB) DeleteRequest(ctx context.Context, id string) error {
+	res, err := db.ExecContext(ctx, `DELETE FROM requests WHERE id = ?`, id)
+	if err != nil {
+		return fmt.Errorf("delete request: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // ListActiveDownloads returns all requests with status "downloading". Called
 // on server startup so the watcher goroutine can resume monitoring in-flight
 // downloads that survived a restart.

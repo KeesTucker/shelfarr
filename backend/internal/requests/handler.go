@@ -236,6 +236,37 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	respond.JSON(w, http.StatusOK, toResponse(req))
 }
 
+// Delete handles DELETE /api/requests/:id.
+// Admins may delete any request. Regular users may only delete their own.
+func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
+	claims, _ := auth.ClaimsFromContext(r.Context())
+	id := chi.URLParam(r, "id")
+
+	req, err := h.db.GetRequest(r.Context(), id)
+	if err != nil {
+		if errors.Is(err, db.ErrNotFound) {
+			respond.Error(w, http.StatusNotFound, "request not found")
+			return
+		}
+		slog.Error("delete request: get", "id", id, "err", err) //nolint:gosec
+		respond.Error(w, http.StatusInternalServerError, "failed to get request")
+		return
+	}
+
+	if claims.Role != "admin" && req.UserID != claims.UserID {
+		respond.Error(w, http.StatusForbidden, "forbidden")
+		return
+	}
+
+	if err := h.db.DeleteRequest(r.Context(), id); err != nil {
+		slog.Error("delete request", "id", id, "err", err) //nolint:gosec
+		respond.Error(w, http.StatusInternalServerError, "failed to delete request")
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // ── import ────────────────────────────────────────────────────────────────────
 
 // watchDirEntry is a single item returned by ListWatchDir.

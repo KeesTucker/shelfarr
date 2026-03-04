@@ -153,6 +153,14 @@ func run() error {
 		}
 	}
 
+	// Reset requests that were left in "moving" status from a previous run.
+	// Their goroutines died with the process and cannot be resumed.
+	if n, err := database.FailStuckMovingRequests(ctx); err != nil {
+		slog.Warn("reset stuck moving requests", "err", err)
+	} else if n > 0 {
+		slog.Info("reset stuck moving requests to failed", "count", n)
+	}
+
 	watcher := qbit.NewWatcher(database, qbitClient, onComplete, onFail)
 	watcher.Start(ctx)
 
@@ -228,6 +236,7 @@ func buildRouter(database *db.DB, tokenCfg auth.TokenConfig, absClient *abs.Clie
 		r.Post("/api/requests", requestsHandler.Submit)
 		r.Get("/api/requests", requestsHandler.List)
 		r.Get("/api/requests/{id}", requestsHandler.Get)
+		r.Delete("/api/requests/{id}", requestsHandler.Delete)
 
 		// Admin-only import routes.
 		r.Group(func(r chi.Router) {

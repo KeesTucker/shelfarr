@@ -2,6 +2,8 @@ package db_test
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"testing"
 
 	"shelfarr/internal/db"
@@ -162,5 +164,104 @@ func TestRequestCRUD(t *testing.T) {
 	}
 	if len(active) != 0 {
 		t.Fatalf("expected 0 active downloads, got %d", len(active))
+	}
+}
+
+func TestFailStuckMovingRequests(t *testing.T) {
+	d := openTestDB(t)
+	ctx := context.Background()
+
+	if err := d.CreateUser(ctx, "u1", "alice", "hash", "user"); err != nil {
+		t.Fatal(err)
+	}
+
+	statuses := []db.RequestStatus{
+		db.StatusPending, db.StatusDownloading, db.StatusMoving, db.StatusMoving, db.StatusDone, db.StatusFailed,
+	}
+	for i, s := range statuses {
+		id := fmt.Sprintf("r%d", i)
+		if err := d.CreateRequest(ctx, &db.Request{
+			ID:          id,
+			UserID:      "u1",
+			Title:       "Book",
+			Author:      "Author",
+			SearchQuery: "Book Author",
+			Status:      s,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	n, err := d.FailStuckMovingRequests(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 2 {
+		t.Errorf("expected 2 rows affected, got %d", n)
+	}
+
+	// Both moving requests must now be failed with the expected error text.
+	for _, id := range []string{"r2", "r3"} {
+		req, err := d.GetRequest(ctx, id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if req.Status != db.StatusFailed {
+			t.Errorf("%s: status=%q want %q", id, req.Status, db.StatusFailed)
+		}
+		if !req.Error.Valid || req.Error.String == "" {
+			t.Errorf("%s: expected non-empty error message", id)
+		}
+	}
+
+	// All other statuses must be unchanged.
+	unchanged := map[string]db.RequestStatus{
+		"r0": db.StatusPending,
+		"r1": db.StatusDownloading,
+		"r4": db.StatusDone,
+		"r5": db.StatusFailed,
+	}
+	for id, want := range unchanged {
+		req, err := d.GetRequest(ctx, id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if req.Status != want {
+			t.Errorf("%s: status=%q want %q", id, req.Status, want)
+		}
+	}
+}
+
+func TestDeleteRequest(t *testing.T) {
+	d := openTestDB(t)
+	ctx := context.Background()
+
+	if err := d.CreateUser(ctx, "u1", "alice", "hash", "user"); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.CreateRequest(ctx, &db.Request{
+		ID:          "r1",
+		UserID:      "u1",
+		Title:       "Book",
+		Author:      "Author",
+		SearchQuery: "Book Author",
+		Status:      db.StatusDone,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Non-existent ID returns ErrNotFound.
+	if err := d.DeleteRequest(ctx, "nope"); !errors.Is(err, db.ErrNotFound) {
+		t.Errorf("expected ErrNotFound for missing id, got %v", err)
+	}
+
+	// Delete the real row.
+	if err := d.DeleteRequest(ctx, "r1"); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+
+	// Row is gone.
+	if _, err := d.GetRequest(ctx, "r1"); !errors.Is(err, db.ErrNotFound) {
+		t.Errorf("expected ErrNotFound after delete, got %v", err)
 	}
 }
