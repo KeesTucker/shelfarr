@@ -102,7 +102,7 @@ func run() error {
 		if err != nil {
 			return fmt.Errorf("serialise metadata: %w", err)
 		}
-		if err := database.UpdateRequestStatus(ctx, req.ID, db.StatusMoving, db.WithMetadata(metaJSON)); err != nil {
+		if err := database.UpdateRequestStatus(ctx, req.ID, db.StatusImporting, db.WithMetadata(metaJSON)); err != nil {
 			return fmt.Errorf("persist metadata: %w", err)
 		}
 		slog.Info("metadata resolved",
@@ -118,7 +118,7 @@ func run() error {
 		if err != nil {
 			return fmt.Errorf("move files: %w", err)
 		}
-		if err := database.UpdateRequestStatus(ctx, req.ID, db.StatusMoving, db.WithFinalPath(finalPath)); err != nil {
+		if err := database.UpdateRequestStatus(ctx, req.ID, db.StatusImporting, db.WithFinalPath(finalPath)); err != nil {
 			slog.Warn("persist final path", "request_id", req.ID, "err", err)
 		}
 
@@ -149,12 +149,12 @@ func run() error {
 		}
 	}
 
-	// Reset requests that were left in "moving" status from a previous run.
+	// Reset requests that were left in "importing" status from a previous run.
 	// Their goroutines died with the process and cannot be resumed.
-	if n, err := database.FailStuckMovingRequests(ctx); err != nil {
-		slog.Warn("reset stuck moving requests", "err", err)
+	if n, err := database.FailStuckImportingRequests(ctx); err != nil {
+		slog.Warn("reset stuck importing requests", "err", err)
 	} else if n > 0 {
-		slog.Info("reset stuck moving requests to failed", "count", n)
+		slog.Info("reset stuck importing requests to failed", "count", n)
 	}
 
 	watcher := qbit.NewWatcher(database, qbitClient, onComplete, onFail)

@@ -685,15 +685,15 @@ func TestDeleteMovingRequestReturns409(t *testing.T) {
 	cfg := testTokenCfg()
 	aliceID := seedUser(t, d, "alice", "user")
 
-	// Seed a request in "moving" status (goroutine actively processing).
+	// Seed a request in "importing" status (goroutine actively processing).
 	reqID := uuid.NewString()
 	if err := d.CreateRequest(context.Background(), &db.Request{
 		ID:          reqID,
 		UserID:      aliceID,
-		Title:       "Moving Book",
+		Title:       "Importing Book",
 		Author:      "Author",
-		SearchQuery: "Moving Book Author",
-		Status:      db.StatusMoving,
+		SearchQuery: "Importing Book Author",
+		Status:      db.StatusImporting,
 	}); err != nil {
 		t.Fatal(err)
 	}
