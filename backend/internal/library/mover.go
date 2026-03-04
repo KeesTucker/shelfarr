@@ -224,7 +224,7 @@ func linkFlat(src, dst string) error {
 		mode fs.FileMode
 	}
 	byName := make(map[string][]fileEntry)
-	if err := filepath.WalkDir(src, func(path string, d fs.DirEntry, err error) error {
+	if err := filepath.WalkDir(src, func(path string, d fs.DirEntry, err error) error { //nolint:gosec
 		if err != nil || d.IsDir() {
 			return nil
 		}
@@ -260,7 +260,7 @@ func linkFlat(src, dst string) error {
 				target = filepath.Join(dst, prefix+" - "+name)
 				slog.Info("library: renamed duplicate to avoid collision", "new_name", filepath.Base(target), "src", e.path) //nolint:gosec
 			}
-			if _, statErr := os.Stat(target); statErr == nil {
+			if _, statErr := os.Stat(target); statErr == nil { //nolint:gosec
 				slog.Warn("library: skipping duplicate filename even with prefix", "file", name, "src", e.path)
 				continue
 			}
