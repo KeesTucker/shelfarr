@@ -263,22 +263,27 @@ func TestLinkFlat_DuplicateNamePrefixed(t *testing.T) {
 		t.Fatalf("linkFlat with duplicate: %v", err)
 	}
 
-	// First occurrence lands under its original name.
-	got1, err := os.ReadFile(filepath.Join(dst, "cover.jpg"))
+	// Both occurrences must be prefixed with their parent directory name so
+	// that neither is silently treated as "the" canonical file.
+	got1, err := os.ReadFile(filepath.Join(dst, "disc1 - cover.jpg"))
 	if err != nil {
-		t.Fatalf("cover.jpg missing: %v", err)
+		t.Fatalf("disc1 - cover.jpg missing: %v", err)
 	}
 	if string(got1) != "first" {
-		t.Errorf("cover.jpg content=%q; want %q", got1, "first")
+		t.Errorf("disc1 - cover.jpg content=%q; want %q", got1, "first")
 	}
 
-	// Second occurrence must be renamed with the parent directory prefix.
 	got2, err := os.ReadFile(filepath.Join(dst, "disc2 - cover.jpg"))
 	if err != nil {
 		t.Fatalf("disc2 - cover.jpg missing: %v", err)
 	}
 	if string(got2) != "second" {
 		t.Errorf("disc2 - cover.jpg content=%q; want %q", got2, "second")
+	}
+
+	// Unprefixed name must not exist.
+	if _, err := os.Stat(filepath.Join(dst, "cover.jpg")); err == nil {
+		t.Error("cover.jpg should not exist when duplicates are present")
 	}
 }
 

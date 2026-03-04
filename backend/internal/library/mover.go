@@ -177,37 +177,59 @@ func linkFlat(src, dst string) error {
 		// Single-file torrent: link directly into dst.
 		return linkOneFile(src, filepath.Join(dst, filepath.Base(src)), info.Mode())
 	}
-	return filepath.WalkDir(src, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return nil // skip unreadable entries
-		}
-		if d.IsDir() {
+
+	// First pass: collect all files grouped by base name to detect duplicates
+	// before linking anything (common in multi-disc torrents where each disc
+	// reuses track numbers like "01.mp3").
+	type fileEntry struct {
+		path string
+		mode fs.FileMode
+	}
+	byName := make(map[string][]fileEntry)
+	if err := filepath.WalkDir(src, func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
 			return nil
 		}
 		fi, err := d.Info()
 		if err != nil {
 			return nil
 		}
-		target := filepath.Join(dst, d.Name())
-		if _, statErr := os.Stat(target); statErr == nil {
-			// Filename collision: prefix with the relative parent directory to
-			// avoid dropping files (common in multi-disc torrents where each
-			// disc reuses track numbers like "01.mp3").
-			rel, relErr := filepath.Rel(src, filepath.Dir(path))
+		byName[d.Name()] = append(byName[d.Name()], fileEntry{path, fi.Mode()})
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	// Second pass: link files. Unique names land as-is; every entry of a
+	// duplicated name is prefixed with its relative parent directory so all
+	// occurrences are consistently renamed (e.g. "disc1 - 01.mp3" and
+	// "disc2 - 01.mp3" rather than an unprefixed first and prefixed second).
+	for name, entries := range byName {
+		if len(entries) == 1 {
+			if err := linkOneFile(entries[0].path, filepath.Join(dst, name), entries[0].mode); err != nil {
+				return err
+			}
+			continue
+		}
+		for _, e := range entries {
+			rel, relErr := filepath.Rel(src, filepath.Dir(e.path))
 			if relErr != nil || rel == "." {
-				slog.Warn("library: skipping top-level duplicate filename", "file", d.Name(), "src", path)
-				return nil
+				slog.Warn("library: skipping top-level duplicate filename", "file", name, "src", e.path)
+				continue
 			}
 			prefix := sanitizeName(strings.ReplaceAll(rel, string(filepath.Separator), " - "))
-			target = filepath.Join(dst, prefix+" - "+d.Name())
-			if _, statErr2 := os.Stat(target); statErr2 == nil {
-				slog.Warn("library: skipping duplicate filename even with prefix", "file", d.Name(), "src", path)
-				return nil
+			target := filepath.Join(dst, prefix+" - "+name)
+			if _, statErr := os.Stat(target); statErr == nil {
+				slog.Warn("library: skipping duplicate filename even with prefix", "file", name, "src", e.path)
+				continue
 			}
-			slog.Info("library: renamed duplicate to avoid collision", "new_name", filepath.Base(target), "src", path)
+			slog.Info("library: renamed duplicate to avoid collision", "new_name", filepath.Base(target), "src", e.path)
+			if err := linkOneFile(e.path, target, e.mode); err != nil {
+				return err
+			}
 		}
-		return linkOneFile(path, target, fi.Mode())
-	})
+	}
+	return nil
 }
 
 // linkOneFile hard-links src to dst, falling back to copyFile on failure
