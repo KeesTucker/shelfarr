@@ -4,7 +4,6 @@
 	import { formatSize } from '$lib/utils';
 	import { Button } from '$lib/components/ui/button';
 	import { Badge } from '$lib/components/ui/badge';
-	import * as Dialog from '$lib/components/ui/dialog';
 
 	interface SearchResult {
 		id: string;
@@ -42,6 +41,20 @@
 	let metaLoading = $state(false);
 	let selectedMeta = $state<Book | null>(null);
 	let metaSearchError = $state('');
+	let metaExpanded = $state(false);
+	let metaConfident = $state(false); // true = high word-overlap, false = user should verify
+	let metaSkipped = $state(false);   // user explicitly chose to use torrent title/author
+
+	// Returns the fraction of metadata title words found in the torrent name.
+	// Used to decide whether to auto-collapse or surface the picker for review.
+	function metaScore(torrentTitle: string, metaTitle: string): number {
+		const norm = (s: string) =>
+			s.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter((w) => w.length > 1);
+		const torrentWords = new Set(norm(torrentTitle));
+		const metaWords = norm(metaTitle);
+		if (metaWords.length === 0) return 0;
+		return metaWords.filter((w) => torrentWords.has(w)).length / metaWords.length;
+	}
 
 	// Toast state
 	let toast = $state<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -76,6 +89,9 @@
 		metaResults = [];
 		selectedMeta = null;
 		metaSearchError = '';
+		metaExpanded = false;
+		metaConfident = false;
+		metaSkipped = false;
 		dialogOpen = true;
 		searchMetadata(result.title, result.author);
 	}
@@ -87,6 +103,13 @@
 				`/api/metadata/search?title=${encodeURIComponent(title)}&author=${encodeURIComponent(author)}`
 			);
 			metaResults = books ?? [];
+			if (metaResults.length > 0) {
+				selectedMeta = metaResults[0];
+				const score = metaScore(selected?.title ?? '', metaResults[0].title);
+				metaConfident = score >= 0.4;
+				// Low confidence: open the picker so the user actively reviews it.
+				metaExpanded = !metaConfident;
+			}
 		} catch {
 			metaSearchError = 'Metadata search failed';
 		} finally {
@@ -94,12 +117,16 @@
 		}
 	}
 
-	function toggleMeta(book: Book) {
-		if (selectedMeta === book) {
-			selectedMeta = null;
-		} else {
-			selectedMeta = book;
-		}
+	function pickMeta(book: Book) {
+		selectedMeta = book;
+		metaSkipped = false;
+		metaExpanded = false;
+	}
+
+	function skipMeta() {
+		selectedMeta = null;
+		metaSkipped = true;
+		metaExpanded = false;
 	}
 
 	async function handleRequest() {
@@ -173,7 +200,7 @@
 		</p>
 		<div class="rounded-xl border border-zinc-800 overflow-hidden">
 			<div class="overflow-x-auto">
-			<table class="w-full min-w-[420px] text-sm">
+			<table class="w-full min-w-105 text-sm">
 				<thead class="bg-zinc-900 border-b border-zinc-800">
 					<tr>
 						<th class="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wide"
@@ -297,35 +324,60 @@
 
 			<!-- Metadata section -->
 			<div class="mt-4">
-				<div class="flex items-center gap-2 mb-2">
-					<span class="text-[10px] uppercase tracking-widest text-zinc-500">Metadata</span>
-					{#if selectedMeta}
-						<span class="text-[10px] text-blue-400">selected — will be used for folder naming</span>
-					{:else}
-						<span class="text-[10px] text-zinc-600">optional — select a match or skip</span>
-					{/if}
-				</div>
-
 				{#if metaLoading}
-					<div class="flex items-center gap-2 py-3 text-xs text-zinc-500">
+					<div class="flex items-center gap-2 py-2 text-xs text-zinc-500">
 						<Loader2 class="w-3 h-3 animate-spin" />
-						Searching for metadata…
+						Finding metadata…
 					</div>
-				{:else if metaSearchError}
-					<p class="text-xs text-zinc-600 py-2">{metaSearchError}</p>
-				{:else if metaResults.length === 0}
-					<p class="text-xs text-zinc-600 py-2">No metadata found — torrent title/author will be used.</p>
+
+				{:else if metaSearchError || metaResults.length === 0}
+					<!-- No results — silent, torrent title/author will be used as-is -->
+
+				{:else if metaSkipped}
+					<!-- User explicitly skipped -->
+					<div class="flex items-center justify-between">
+						<p class="text-xs text-zinc-600">Using torrent title/author for folder naming.</p>
+						<button
+							type="button"
+							class="text-xs text-zinc-400 underline underline-offset-2 hover:text-zinc-200 transition-colors"
+							onclick={() => { metaSkipped = false; metaExpanded = true; }}
+						>Add metadata</button>
+					</div>
+
+				{:else if !metaExpanded}
+					<!-- Collapsed: high-confidence auto-selection -->
+					<div class="rounded-lg bg-zinc-800 p-3 flex items-start justify-between gap-2">
+						<div class="min-w-0">
+							<div class="text-xs text-zinc-500 mb-1">BOOK METADATA</div>
+							<div class="text-sm text-zinc-200 font-medium leading-snug truncate">{selectedMeta?.title}</div>
+							<div class="text-xs text-zinc-400 mt-0.5 truncate">
+								{selectedMeta?.author}{selectedMeta?.year ? ` · ${selectedMeta.year}` : ''}
+							</div>
+						</div>
+						<Check class="w-4 h-4 text-blue-400 shrink-0 mt-1" />
+					</div>
+					<p class="text-xs text-zinc-600 mt-1.5">
+						Looks wrong?
+						<button type="button" class="text-zinc-400 underline underline-offset-2 hover:text-zinc-200 transition-colors" onclick={() => (metaExpanded = true)}>Change it</button>
+						·
+						<button type="button" class="text-zinc-400 underline underline-offset-2 hover:text-zinc-200 transition-colors" onclick={skipMeta}>Skip</button>
+					</p>
+
 				{:else}
+					<!-- Expanded: low confidence or user chose to change -->
+					{#if !metaConfident}
+						<p class="text-xs text-amber-500 mb-2">We're not confident these match — please pick one or skip.</p>
+					{:else}
+						<div class="text-xs text-zinc-500 mb-2">Pick the best match:</div>
+					{/if}
 					<div class="space-y-2">
 						{#each metaResults as book (book.title + book.author)}
 							{@const isSelected = selectedMeta === book}
 							<button
 								type="button"
-								onclick={() => toggleMeta(book)}
-								class="w-full text-left rounded-lg p-3 transition-colors cursor-pointer
-									{isSelected
-										? 'bg-zinc-700 ring-1 ring-blue-500'
-										: 'bg-zinc-800 hover:bg-zinc-700'}"
+								onclick={() => pickMeta(book)}
+								class="w-full text-left rounded-lg p-3 transition-colors
+									{isSelected ? 'bg-zinc-700 ring-1 ring-blue-500' : 'bg-zinc-800 hover:bg-zinc-700'}"
 							>
 								<div class="flex items-start justify-between gap-2">
 									<div class="min-w-0">
@@ -333,17 +385,18 @@
 										<div class="text-xs text-zinc-400 mt-0.5 truncate">{book.author}</div>
 									</div>
 									<div class="flex items-center gap-2 shrink-0">
-										{#if book.year}
-											<span class="text-xs text-zinc-500">{book.year}</span>
-										{/if}
-										{#if isSelected}
-											<Check class="w-3.5 h-3.5 text-blue-400" />
-										{/if}
+										{#if book.year}<span class="text-xs text-zinc-500">{book.year}</span>{/if}
+										{#if isSelected}<Check class="w-3.5 h-3.5 text-blue-400" />{/if}
 									</div>
 								</div>
 							</button>
 						{/each}
 					</div>
+					<button
+						type="button"
+						class="mt-2 text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+						onclick={skipMeta}
+					>None of these look right — skip</button>
 				{/if}
 			</div>
 
