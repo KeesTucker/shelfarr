@@ -19,4 +19,3 @@
 		{@render children()}
 	</div>
 {/if}
-will
