@@ -173,6 +173,9 @@ func sanitizeName(s string) string {
 // that removing a leaf can cascade to its now-empty parent.
 // Returns the number of directories successfully removed.
 func pruneEmptyDirs(root string) (int, error) {
+	if _, err := os.Stat(root); err != nil {
+		return 0, err
+	}
 	var dirs []string
 	if err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil || path == root || !d.IsDir() {

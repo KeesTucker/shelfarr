@@ -354,8 +354,13 @@ func TestPruneEmptyDirs(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := pruneEmptyDirs(root); err != nil {
+	// 3 empty dirs: Ghost Author, Empty Book/nested, Empty Book (cascades after nested removed).
+	removed, err := pruneEmptyDirs(root)
+	if err != nil {
 		t.Fatalf("pruneEmptyDirs: %v", err)
+	}
+	if removed != 3 {
+		t.Errorf("removed=%d; want 3", removed)
 	}
 
 	// Root must still exist.
