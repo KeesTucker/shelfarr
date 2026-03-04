@@ -173,9 +173,10 @@ func run() error {
 
 	r := buildRouter(database, tokenCfg, absClient, prowlarrClient, requestsHandler, metaHandler, libraryHandler, cfg.StaticDir)
 
-	slog.Info("server listening", "port", "8008")
+	const port = "8008"
+	slog.Info("server listening", "port", port)
 	srv := &http.Server{
-		Addr:         ":8008",
+		Addr:         ":" + port,
 		Handler:      r,
 		ReadTimeout:  30 * time.Second,
 		WriteTimeout: 30 * time.Second,
