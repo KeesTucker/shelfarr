@@ -217,7 +217,7 @@ func TestSetCategoryServerError(t *testing.T) {
 			http.SetCookie(w, &http.Cookie{Name: "SID", Value: "test-sid"})
 			fmt.Fprint(w, "Ok.")
 		case "/api/v2/torrents/setCategory":
-			http.Error(w, "Conflict", http.StatusConflict)
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		default:
 			http.NotFound(w, r)
 		}
@@ -225,8 +225,41 @@ func TestSetCategoryServerError(t *testing.T) {
 	defer srv.Close()
 
 	c := New(srv.URL, "admin", "pass")
-	if err := c.SetCategory(context.Background(), "deadbeef", "nonexistent-category"); err == nil {
+	if err := c.SetCategory(context.Background(), "deadbeef", "category"); err == nil {
 		t.Fatal("expected error on non-200 response")
+	}
+}
+
+func TestSetCategoryAutoCreateOnConflict(t *testing.T) {
+	var createCalled bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v2/auth/login":
+			http.SetCookie(w, &http.Cookie{Name: "SID", Value: "test-sid"})
+			fmt.Fprint(w, "Ok.")
+		case "/api/v2/torrents/setCategory":
+			if !createCalled {
+				// First call: category doesn't exist yet.
+				w.WriteHeader(http.StatusConflict)
+				return
+			}
+			// Second call (after auto-create): succeed.
+			w.WriteHeader(http.StatusOK)
+		case "/api/v2/torrents/createCategory":
+			createCalled = true
+			w.WriteHeader(http.StatusOK)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	c := New(srv.URL, "admin", "pass")
+	if err := c.SetCategory(context.Background(), "deadbeef", "new-category"); err != nil {
+		t.Fatalf("SetCategory: %v", err)
+	}
+	if !createCalled {
+		t.Error("expected createCategory to be called on 409")
 	}
 }
 
