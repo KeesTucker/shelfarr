@@ -86,7 +86,7 @@ func authReq(t *testing.T, method, target, body string, cfg auth.TokenConfig, us
 	if err != nil {
 		t.Fatal(err)
 	}
-	req.Header.Set("Authorization", "Bearer "+tokenStr)
+	req.AddCookie(&http.Cookie{Name: auth.AuthCookieName, Value: tokenStr})
 
 	var out *http.Request
 	auth.Authenticate(cfg)(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {

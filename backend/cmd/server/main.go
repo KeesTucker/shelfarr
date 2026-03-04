@@ -49,8 +49,9 @@ func run() error {
 	}()
 
 	tokenCfg := auth.TokenConfig{
-		Secret: []byte(cfg.JWTSecret),
-		Expiry: cfg.JWTExpiry,
+		Secret:       []byte(cfg.JWTSecret),
+		Expiry:       cfg.JWTExpiry,
+		CookieSecure: cfg.CookieSecure,
 	}
 
 	// Create clients here so both the router and the watcher share the same instances.
@@ -180,6 +181,7 @@ func buildRouter(database *db.DB, tokenCfg auth.TokenConfig, absClient *abs.Clie
 
 	// Public — no JWT required.
 	r.Post("/api/auth/login", authHandler.Login)
+	r.Post("/api/auth/logout", authHandler.Logout)
 
 	// Protected — JWT required for all routes in this group.
 	r.Group(func(r chi.Router) {

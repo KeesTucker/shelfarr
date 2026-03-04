@@ -41,8 +41,9 @@ type Config struct {
 	DiscordWebhookURL string
 
 	// Auth
-	JWTSecret string        `json:"-"` //nolint:gosec
-	JWTExpiry time.Duration `json:"-"`
+	JWTSecret    string        `json:"-"` //nolint:gosec
+	JWTExpiry    time.Duration `json:"-"`
+	CookieSecure bool          // set false for local dev over plain HTTP
 
 	// Server
 	Port      string
@@ -88,6 +89,7 @@ func Load() (*Config, error) {
 		DiscordWebhookURL: getenv("DISCORD_WEBHOOK_URL", ""),
 		JWTSecret:         jwtSecret,
 		JWTExpiry:         jwtExpiry,
+		CookieSecure:      os.Getenv("COOKIE_INSECURE") != "true",
 		Port:              getenv("PORT", "8008"),
 		StaticDir:         getenv("STATIC_DIR", "/app/static"),
 	}, nil

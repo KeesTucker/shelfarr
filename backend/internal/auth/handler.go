@@ -38,9 +38,13 @@ type loginRequest struct {
 	Password string `json:"password"` //nolint:gosec
 }
 
+// AuthCookieName is the name of the httpOnly session cookie.
+const AuthCookieName = "shelfarr_token" //nolint:gosec
+
+const authCookieName = AuthCookieName
+
 type loginResponse struct {
-	Token string  `json:"token"`
-	User  UserDTO `json:"user"`
+	User UserDTO `json:"user"`
 }
 
 // UserDTO is the public representation of a user returned in API responses.
@@ -100,9 +104,9 @@ func (h *Handler) loginABS(w http.ResponseWriter, r *http.Request, req loginRequ
 		return
 	}
 
+	h.setAuthCookie(w, token)
 	respond.JSON(w, http.StatusOK, loginResponse{
-		Token: token,
-		User:  UserDTO{ID: absUser.ID, Username: absUser.Username, Role: absUser.Role()},
+		User: UserDTO{ID: absUser.ID, Username: absUser.Username, Role: absUser.Role()},
 	})
 }
 
@@ -124,9 +128,37 @@ func (h *Handler) loginLocal(w http.ResponseWriter, r *http.Request, req loginRe
 		return
 	}
 
+	h.setAuthCookie(w, token)
 	respond.JSON(w, http.StatusOK, loginResponse{
-		Token: token,
-		User:  UserDTO{ID: user.ID, Username: user.Username, Role: user.Role},
+		User: UserDTO{ID: user.ID, Username: user.Username, Role: user.Role},
+	})
+}
+
+// Logout clears the auth cookie.
+//
+//	POST /api/auth/logout
+func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     authCookieName,
+		Value:    "",
+		HttpOnly: true,
+		Secure:   h.cfg.CookieSecure,
+		SameSite: http.SameSiteStrictMode,
+		Path:     "/",
+		MaxAge:   -1,
+	})
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) setAuthCookie(w http.ResponseWriter, token string) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     authCookieName,
+		Value:    token,
+		HttpOnly: true,
+		Secure:   h.cfg.CookieSecure,
+		SameSite: http.SameSiteStrictMode,
+		Path:     "/",
+		MaxAge:   int(h.cfg.Expiry.Seconds()),
 	})
 }
 

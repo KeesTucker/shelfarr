@@ -78,7 +78,7 @@ func TestAdminOnlyRoutesRequireAdmin(t *testing.T) {
 	for _, tc := range routes {
 		t.Run(tc.method+" "+tc.path, func(t *testing.T) {
 			req := httptest.NewRequest(tc.method, tc.path, nil)
-			req.Header.Set("Authorization", "Bearer "+userToken)
+			req.AddCookie(&http.Cookie{Name: auth.AuthCookieName, Value: userToken})
 			rr := httptest.NewRecorder()
 			router.ServeHTTP(rr, req)
 			if rr.Code != http.StatusForbidden {

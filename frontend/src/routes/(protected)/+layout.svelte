@@ -5,15 +5,21 @@
 	import Nav from '$lib/components/nav.svelte';
 
 	let { children } = $props();
+	let ready = $state(false);
 
-	onMount(() => {
+	onMount(async () => {
+		if (!authStore.user) {
+			await authStore.restore();
+		}
 		if (!authStore.user) {
 			goto('/login');
+		} else {
+			ready = true;
 		}
 	});
 </script>
 
-{#if authStore.user}
+{#if ready}
 	<div class="min-h-screen bg-zinc-950 text-zinc-50">
 		<Nav />
 		{@render children()}

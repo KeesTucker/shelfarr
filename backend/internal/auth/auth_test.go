@@ -151,7 +151,7 @@ func TestAuthenticateMiddleware(t *testing.T) {
 		reached = false
 		tokenStr, _ := auth.NewToken(cfg, "u42", "bob", "user")
 		req := httptest.NewRequest(http.MethodGet, "/", nil)
-		req.Header.Set("Authorization", "Bearer "+tokenStr)
+		req.AddCookie(&http.Cookie{Name: auth.AuthCookieName, Value: tokenStr})
 
 		rr := httptest.NewRecorder()
 		handler.ServeHTTP(rr, req)
@@ -164,7 +164,7 @@ func TestAuthenticateMiddleware(t *testing.T) {
 		}
 	})
 
-	t.Run("missing header", func(t *testing.T) {
+	t.Run("missing cookie", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/", nil)
 		rr := httptest.NewRecorder()
 		handler.ServeHTTP(rr, req)
@@ -175,18 +175,7 @@ func TestAuthenticateMiddleware(t *testing.T) {
 
 	t.Run("malformed token", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/", nil)
-		req.Header.Set("Authorization", "Bearer not.a.token")
-		rr := httptest.NewRecorder()
-		handler.ServeHTTP(rr, req)
-		if rr.Code != http.StatusUnauthorized {
-			t.Errorf("expected 401, got %d", rr.Code)
-		}
-	})
-
-	t.Run("wrong prefix", func(t *testing.T) {
-		tokenStr, _ := auth.NewToken(cfg, "u42", "bob", "user")
-		req := httptest.NewRequest(http.MethodGet, "/", nil)
-		req.Header.Set("Authorization", "Token "+tokenStr)
+		req.AddCookie(&http.Cookie{Name: auth.AuthCookieName, Value: "not.a.token"})
 		rr := httptest.NewRecorder()
 		handler.ServeHTTP(rr, req)
 		if rr.Code != http.StatusUnauthorized {
@@ -205,7 +194,7 @@ func TestRequireAdmin(t *testing.T) {
 	makeReq := func(role string) *http.Request {
 		tokenStr, _ := auth.NewToken(cfg, "u1", "alice", role)
 		req := httptest.NewRequest(http.MethodGet, "/", nil)
-		req.Header.Set("Authorization", "Bearer "+tokenStr)
+		req.AddCookie(&http.Cookie{Name: auth.AuthCookieName, Value: tokenStr})
 		return req
 	}
 
@@ -239,15 +228,12 @@ func TestLoginLocalOK(t *testing.T) {
 		t.Fatalf("expected 200, got %d — body: %s", rr.Code, rr.Body)
 	}
 
-	var resp struct {
-		Token string       `json:"token"`
-		User  auth.UserDTO `json:"user"`
+	if rr.Result().Cookies()[0].Name != auth.AuthCookieName {
+		t.Error("expected auth cookie in response")
 	}
+	var resp struct{ User auth.UserDTO }
 	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
 		t.Fatal(err)
-	}
-	if resp.Token == "" {
-		t.Error("expected non-empty token")
 	}
 	if resp.User.Username != "alice" || resp.User.Role != "admin" {
 		t.Errorf("unexpected user in response: %+v", resp.User)
@@ -330,15 +316,12 @@ func TestLoginABSOK(t *testing.T) {
 		t.Fatalf("expected 200, got %d — body: %s", rr.Code, rr.Body)
 	}
 
-	var resp struct {
-		Token string       `json:"token"`
-		User  auth.UserDTO `json:"user"`
+	if rr.Result().Cookies()[0].Name != auth.AuthCookieName {
+		t.Error("expected auth cookie in response")
 	}
+	var resp struct{ User auth.UserDTO }
 	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
 		t.Fatal(err)
-	}
-	if resp.Token == "" {
-		t.Error("expected non-empty token")
 	}
 	if resp.User.ID != "abs-u1" || resp.User.Username != "alice" || resp.User.Role != "admin" {
 		t.Errorf("unexpected user in response: %+v", resp.User)
@@ -398,7 +381,7 @@ func TestMe(t *testing.T) {
 
 	h := auth.NewHandler(d, cfg, nil)
 	req := httptest.NewRequest(http.MethodGet, "/api/auth/me", nil)
-	req.Header.Set("Authorization", "Bearer "+tokenStr)
+	req.AddCookie(&http.Cookie{Name: auth.AuthCookieName, Value: tokenStr})
 
 	rr := httptest.NewRecorder()
 	auth.Authenticate(cfg)(http.HandlerFunc(h.Me)).ServeHTTP(rr, req)

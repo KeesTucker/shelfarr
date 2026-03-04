@@ -40,6 +40,7 @@ services:
       # ── Auth ──────────────────────────────────────────────────────────────
       JWT_SECRET: ${JWT_SECRET}
       JWT_EXPIRY: 24h
+      # COOKIE_INSECURE: "true"  # uncomment only for local dev over plain HTTP (no HTTPS/Cloudflare)
 
       # ── Server ────────────────────────────────────────────────────────────
       PORT: "8008"

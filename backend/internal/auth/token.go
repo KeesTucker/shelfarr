@@ -17,8 +17,9 @@ type Claims struct {
 
 // TokenConfig holds the signing material and lifetime for JWTs.
 type TokenConfig struct {
-	Secret []byte        `json:"-"` //nolint:gosec
-	Expiry time.Duration `json:"-"`
+	Secret       []byte        `json:"-"` //nolint:gosec
+	Expiry       time.Duration `json:"-"`
+	CookieSecure bool          // false allows the cookie over plain HTTP (local dev)
 }
 
 // NewToken creates and signs a JWT for the given user.

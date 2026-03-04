@@ -314,7 +314,7 @@ func (c *Client) findRecentlyAdded(ctx context.Context, addedAfter int64) (strin
 			}
 		}
 	}
-	return "", fmt.Errorf("qbit: newly added torrent not visible after 5 attempts")
+	return "", fmt.Errorf("qbit: newly added torrent not visible after 15 attempts")
 }
 
 // listAll returns all torrents currently tracked by qBittorrent.
