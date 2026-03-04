@@ -3,9 +3,13 @@ package metadata
 import (
 	"context"
 	"encoding/json"
+	"encoding/xml"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -196,5 +200,200 @@ func TestBookJSONOmitsZeroFields(t *testing.T) {
 	}
 	if _, present := m["year"]; present {
 		t.Error("JSON should omit zero-value field \"year\"")
+	}
+}
+
+// ── FromJSON ──────────────────────────────────────────────────────────────────
+
+func TestFromJSON_RoundTrip(t *testing.T) {
+	original := &Book{Title: "Mistborn", Author: "Brandon Sanderson", Year: 2006}
+	raw, _ := original.JSON()
+
+	got, err := FromJSON(raw)
+	if err != nil {
+		t.Fatalf("FromJSON error: %v", err)
+	}
+	if *got != *original {
+		t.Errorf("got %+v; want %+v", *got, *original)
+	}
+}
+
+func TestFromJSON_NoYear(t *testing.T) {
+	got, err := FromJSON(`{"title":"Dune","author":"Frank Herbert"}`)
+	if err != nil {
+		t.Fatalf("FromJSON error: %v", err)
+	}
+	if got.Year != 0 {
+		t.Errorf("Year=%d; want 0", got.Year)
+	}
+}
+
+func TestFromJSON_InvalidJSON(t *testing.T) {
+	_, err := FromJSON("not json")
+	if err == nil {
+		t.Error("expected error for invalid JSON")
+	}
+}
+
+// ── writeOPF / EnsureOPF ─────────────────────────────────────────────────────
+
+// opfPackage is a minimal struct for parsing the generated OPF file.
+// The dc: elements live in the Dublin Core namespace.
+type opfPackage struct {
+	XMLName          xml.Name    `xml:"package"`
+	UniqueIdentifier string      `xml:"unique-identifier,attr"`
+	Version          string      `xml:"version,attr"`
+	Metadata         opfMetadata `xml:"metadata"`
+}
+
+type opfMetadata struct {
+	Identifier   string `xml:"http://purl.org/dc/elements/1.1/ identifier"`
+	IdentifierID string // populated from raw attr scan — see readOPF helper
+	Title        string `xml:"http://purl.org/dc/elements/1.1/ title"`
+	Creator      string `xml:"http://purl.org/dc/elements/1.1/ creator"`
+	Date         string `xml:"http://purl.org/dc/elements/1.1/ date"`
+	Language     string `xml:"http://purl.org/dc/elements/1.1/ language"`
+}
+
+// readOPF parses the OPF file at path and returns the package element.
+func readOPF(t *testing.T, path string) opfPackage {
+	t.Helper()
+	data, err := os.ReadFile(path) //nolint:gosec
+	if err != nil {
+		t.Fatalf("read OPF: %v", err)
+	}
+	var pkg opfPackage
+	if err := xml.Unmarshal(data, &pkg); err != nil {
+		t.Fatalf("parse OPF as XML: %v\ncontent:\n%s", err, data)
+	}
+	return pkg
+}
+
+func TestWriteOPF_ValidXML(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "book.opf")
+	book := &Book{Title: "Mistborn", Author: "Brandon Sanderson", Year: 2006}
+	if err := writeOPF(path, book); err != nil {
+		t.Fatalf("writeOPF: %v", err)
+	}
+	// xml.Unmarshal errors on malformed XML — readOPF calls t.Fatal on failure.
+	readOPF(t, path)
+}
+
+func TestWriteOPF_Fields(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "book.opf")
+	book := &Book{Title: "The Final Empire", Author: "Brandon Sanderson", Year: 2006}
+	if err := writeOPF(path, book); err != nil {
+		t.Fatalf("writeOPF: %v", err)
+	}
+
+	pkg := readOPF(t, path)
+
+	if pkg.Metadata.Title != book.Title {
+		t.Errorf("dc:title=%q; want %q", pkg.Metadata.Title, book.Title)
+	}
+	if pkg.Metadata.Creator != book.Author {
+		t.Errorf("dc:creator=%q; want %q", pkg.Metadata.Creator, book.Author)
+	}
+	if pkg.Metadata.Date != "2006-01-01" {
+		t.Errorf("dc:date=%q; want %q", pkg.Metadata.Date, "2006-01-01")
+	}
+	if pkg.Metadata.Language != "en" {
+		t.Errorf("dc:language=%q; want %q", pkg.Metadata.Language, "en")
+	}
+}
+
+func TestWriteOPF_NoYear_DateElementAbsent(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "book.opf")
+	if err := writeOPF(path, &Book{Title: "Dune", Author: "Frank Herbert"}); err != nil {
+		t.Fatalf("writeOPF: %v", err)
+	}
+
+	pkg := readOPF(t, path)
+	if pkg.Metadata.Date != "" {
+		t.Errorf("dc:date=%q; want empty (year==0)", pkg.Metadata.Date)
+	}
+}
+
+func TestWriteOPF_UniqueIdentifierReferencesIdentifierElement(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "book.opf")
+	if err := writeOPF(path, &Book{Title: "Dune", Author: "Frank Herbert", Year: 1965}); err != nil {
+		t.Fatalf("writeOPF: %v", err)
+	}
+
+	pkg := readOPF(t, path)
+
+	// The unique-identifier attribute must point to "uid".
+	if pkg.UniqueIdentifier != "uid" {
+		t.Errorf("unique-identifier=%q; want %q", pkg.UniqueIdentifier, "uid")
+	}
+	// And the dc:identifier element must exist (non-empty) to satisfy that reference.
+	if pkg.Metadata.Identifier == "" {
+		t.Error("dc:identifier element is missing or empty; unique-identifier would be a dangling reference")
+	}
+	// The id attribute on dc:identifier must be "uid".
+	data, _ := os.ReadFile(path) //nolint:gosec
+	if !strings.Contains(string(data), `id="uid"`) {
+		t.Error(`dc:identifier element must have id="uid" to satisfy unique-identifier="uid"`)
+	}
+}
+
+func TestWriteOPF_SpecialCharsEscaped(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "book.opf")
+	book := &Book{Title: "A & B: <Story>", Author: `Author "Quote"`, Year: 2000}
+	if err := writeOPF(path, book); err != nil {
+		t.Fatalf("writeOPF: %v", err)
+	}
+
+	// XML parser must succeed (would fail on unescaped & < >).
+	pkg := readOPF(t, path)
+
+	// Values should be round-tripped correctly by the XML parser.
+	if pkg.Metadata.Title != book.Title {
+		t.Errorf("dc:title=%q; want %q", pkg.Metadata.Title, book.Title)
+	}
+	if pkg.Metadata.Creator != book.Author {
+		t.Errorf("dc:creator=%q; want %q", pkg.Metadata.Creator, book.Author)
+	}
+}
+
+func TestEnsureOPF_CreatesWhenAbsent(t *testing.T) {
+	dir := t.TempDir()
+	if err := EnsureOPF(dir, &Book{Title: "Dune", Author: "Frank Herbert", Year: 1965}); err != nil {
+		t.Fatalf("EnsureOPF: %v", err)
+	}
+
+	matches, _ := filepath.Glob(filepath.Join(dir, "*.opf"))
+	if len(matches) != 1 {
+		t.Fatalf("expected 1 OPF file, got %d", len(matches))
+	}
+	pkg := readOPF(t, matches[0])
+	if pkg.Metadata.Title != "Dune" {
+		t.Errorf("dc:title=%q; want %q", pkg.Metadata.Title, "Dune")
+	}
+}
+
+func TestEnsureOPF_SkipsWhenAlreadyPresent(t *testing.T) {
+	dir := t.TempDir()
+	existing := filepath.Join(dir, "existing.opf")
+	if err := os.WriteFile(existing, []byte("<?xml version='1.0'?><package/>"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := EnsureOPF(dir, &Book{Title: "Dune", Author: "Frank Herbert"}); err != nil {
+		t.Fatalf("EnsureOPF: %v", err)
+	}
+
+	// book.opf must NOT have been created — the existing file should be the only one.
+	matches, _ := filepath.Glob(filepath.Join(dir, "*.opf"))
+	if len(matches) != 1 {
+		t.Errorf("expected 1 OPF file (the pre-existing one), got %d: %v", len(matches), matches)
+	}
+	if matches[0] != existing {
+		t.Errorf("expected pre-existing %q to be untouched, got %q", existing, matches[0])
 	}
 }

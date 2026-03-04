@@ -51,11 +51,11 @@ type RequestWithUser struct {
 func (db *DB) CreateRequest(ctx context.Context, r *Request) error {
 	_, err := db.ExecContext(ctx, `
 		INSERT INTO requests
-			(id, user_id, title, author, search_query, torrent_name, torrent_hash, status)
+			(id, user_id, title, author, search_query, torrent_name, torrent_hash, status, metadata_json)
 		VALUES
-			(?, ?, ?, ?, ?, ?, ?, ?)`,
+			(?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		r.ID, r.UserID, r.Title, r.Author, r.SearchQuery,
-		r.TorrentName, r.TorrentHash, r.Status,
+		r.TorrentName, r.TorrentHash, r.Status, r.MetadataJSON,
 	)
 	if err != nil {
 		return fmt.Errorf("create request: %w", err)

@@ -94,8 +94,21 @@ func run() error {
 	}
 
 	onComplete := func(ctx context.Context, req *db.Request, info *qbit.TorrentInfo) error {
-		// 1. Resolve and persist metadata.
-		book := metaClient.Resolve(ctx, req.Title, req.Author)
+		// 1. Resolve metadata — use user-selected metadata if available, otherwise
+		// fall back to an automatic OpenLibrary lookup.
+		var book *metadata.Book
+		if req.MetadataJSON.Valid && req.MetadataJSON.String != "" {
+			b, err := metadata.FromJSON(req.MetadataJSON.String)
+			if err != nil {
+				slog.Warn("metadata: bad stored JSON, re-fetching", "request_id", req.ID, "err", err)
+				book = metaClient.Resolve(ctx, req.Title, req.Author)
+			} else {
+				book = b
+			}
+		} else {
+			book = metaClient.Resolve(ctx, req.Title, req.Author)
+		}
+
 		metaJSON, err := book.JSON()
 		if err != nil {
 			return fmt.Errorf("serialise metadata: %w", err)
@@ -120,7 +133,12 @@ func run() error {
 			slog.Warn("persist final path", "request_id", req.ID, "err", err)
 		}
 
-		// 3. Discord success notification (best-effort).
+		// 3. Write OPF sidecar if none already present (best-effort).
+		if err := metadata.EnsureOPF(finalPath, book); err != nil {
+			slog.Warn("metadata: write OPF", "request_id", req.ID, "path", finalPath, "err", err)
+		}
+
+		// 4. Discord success notification (best-effort).
 		if err := discord.NotifyComplete(ctx, cfg.DiscordWebhookURL, book,
 			lookupUsername(ctx, req.UserID), finalPath); err != nil {
 			slog.Warn("discord notify complete", "request_id", req.ID, "err", err)
@@ -146,8 +164,9 @@ func run() error {
 
 	requestsHandler := requests.New(database, prowlarrClient, qbitClient, cfg.QBitCategory)
 	requestsHandler.SetImportConfig(ctx, watchDir, onImportFn, onFail)
+	metaHandler := metadata.NewHandler(metaClient)
 
-	r := buildRouter(database, tokenCfg, absClient, prowlarrClient, requestsHandler, cfg.StaticDir)
+	r := buildRouter(database, tokenCfg, absClient, prowlarrClient, requestsHandler, metaHandler, cfg.StaticDir)
 
 	slog.Info("server listening", "port", cfg.Port)
 	srv := &http.Server{
@@ -186,7 +205,7 @@ func run() error {
 
 // buildRouter wires all routes. Auth-protected routes are added in a sub-router
 // that applies the Authenticate middleware.
-func buildRouter(database *db.DB, tokenCfg auth.TokenConfig, absClient *abs.Client, prowlarrClient *prowlarr.Client, requestsHandler *requests.Handler, staticDir string) http.Handler {
+func buildRouter(database *db.DB, tokenCfg auth.TokenConfig, absClient *abs.Client, prowlarrClient *prowlarr.Client, requestsHandler *requests.Handler, metaHandler *metadata.Handler, staticDir string) http.Handler {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
@@ -205,6 +224,7 @@ func buildRouter(database *db.DB, tokenCfg auth.TokenConfig, absClient *abs.Clie
 		r.Use(auth.Authenticate(tokenCfg))
 		r.Get("/api/auth/me", authHandler.Me)
 		r.Get("/api/search", searchHandler.Search)
+		r.Get("/api/metadata/search", metaHandler.Search)
 		r.Post("/api/requests", requestsHandler.Submit)
 		r.Get("/api/requests", requestsHandler.List)
 		r.Get("/api/requests/{id}", requestsHandler.Get)

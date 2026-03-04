@@ -16,6 +16,7 @@ import (
 
 	"shelfarr/internal/auth"
 	"shelfarr/internal/db"
+	"shelfarr/internal/metadata"
 	"shelfarr/internal/prowlarr"
 	"shelfarr/internal/qbit"
 	"shelfarr/internal/respond"
@@ -65,9 +66,10 @@ func (h *Handler) SetImportConfig(
 
 // submitBody is the request body accepted by Submit.
 type submitBody struct {
-	Title       string `json:"title"`
-	Author      string `json:"author"`
-	TorrentGUID string `json:"torrentGuid"`
+	Title       string         `json:"title"`
+	Author      string         `json:"author"`
+	TorrentGUID string         `json:"torrentGuid"`
+	Metadata    *metadata.Book `json:"metadata,omitempty"`
 }
 
 // requestResponse is the JSON shape for a single request in API responses.
@@ -153,6 +155,15 @@ func (h *Handler) Submit(w http.ResponseWriter, r *http.Request) {
 		TorrentName: sql.NullString{String: release.Title, Valid: true},
 		TorrentHash: sql.NullString{String: hash, Valid: true},
 		Status:      db.StatusDownloading,
+	}
+	if body.Metadata != nil {
+		metaJSON, err := body.Metadata.JSON()
+		if err != nil {
+			slog.Error("marshal user-selected metadata", "err", err)
+			respond.Error(w, http.StatusBadRequest, "invalid metadata")
+			return
+		}
+		req.MetadataJSON = sql.NullString{String: metaJSON, Valid: true}
 	}
 	if err := h.db.CreateRequest(r.Context(), req); err != nil {
 		slog.Error("create request", "user_id", claims.UserID, "err", err) //nolint:gosec
