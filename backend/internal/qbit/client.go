@@ -220,7 +220,7 @@ func (c *Client) createCategory(ctx context.Context, category string) error {
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	if resp.StatusCode != http.StatusOK {
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusConflict {
 		return fmt.Errorf("unexpected status %d", resp.StatusCode)
 	}
 	return nil
