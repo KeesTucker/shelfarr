@@ -10,15 +10,41 @@ import (
 	"shelfarr/internal/metadata"
 )
 
+// flattenBookDir moves all files from subdirectories directly into dir using
+// the same duplicate-prefixing rules as linkFlat, then removes the original
+// tree. It operates atomically: files are linked into a sibling temp directory
+// first, then the original is swapped out only on success.
+func flattenBookDir(dir string) error {
+	tmpDir, err := os.MkdirTemp(filepath.Dir(dir), ".flatten-*") //nolint:gosec
+	if err != nil {
+		return fmt.Errorf("create temp dir: %w", err)
+	}
+	if err := linkFlat(dir, tmpDir); err != nil {
+		_ = os.RemoveAll(tmpDir)
+		return fmt.Errorf("flatten files: %w", err)
+	}
+	backup := dir + ".bak"
+	if err := os.Rename(dir, backup); err != nil { //nolint:gosec
+		_ = os.RemoveAll(tmpDir)
+		return fmt.Errorf("backup title dir: %w", err)
+	}
+	if err := os.Rename(tmpDir, dir); err != nil { //nolint:gosec
+		_ = os.Rename(backup, dir) //nolint:gosec // best-effort restore
+		return fmt.Errorf("install flattened dir: %w", err)
+	}
+	return os.RemoveAll(backup) //nolint:gosec
+}
+
 // CleanupBook renames the book folder, audio files, and patches the OPF to
 // match the naming rules (sanitizeName(Author)/sanitizeName(Title)/).
 //
 // Steps:
 //  1. Re-resolve metadata from OPF / ABS json / folder name.
-//  2. If single audio file: rename to sanitizeName(title)+ext.
-//  3. Patch OPF (try edit, fall back to regen).
-//  4. Rename title folder if needed.
-//  5. Rename author folder if needed (merges into existing if target exists).
+//  2. If nested subdirectories are present: flatten all files to the top level.
+//  3. If single audio file: rename to sanitizeName(title)+ext.
+//  4. Patch OPF (try edit, fall back to regen).
+//  5. Rename title folder if needed.
+//  6. Rename author folder if needed (merges into existing if target exists).
 func CleanupBook(libraryDir string, entry BookEntry) error {
 	dir := entry.Path
 
@@ -26,10 +52,20 @@ func CleanupBook(libraryDir string, entry BookEntry) error {
 	files := collectFiles(dir)
 	book, _ := resolveMetadata(dir, entry.TitleFolder, entry.AuthorFolder, files)
 
+	// 2. Flatten nested subdirectories if present.
+	if hasNestedDirs(dir) {
+		if err := flattenBookDir(dir); err != nil {
+			return fmt.Errorf("flatten book dir: %w", err)
+		}
+		files = collectFiles(dir)
+	}
+
+	_ = files // consumed by resolveMetadata; re-collected after flatten if needed
+
 	expectedTitle := sanitizeName(book.Title)
 	expectedAuthor := sanitizeName(book.Author)
 
-	// 2. Rename single audio file.
+	// 3. Rename single audio file.
 	audioFiles := listAudioFiles(dir)
 	if len(audioFiles) == 1 {
 		old := audioFiles[0]
@@ -43,7 +79,7 @@ func CleanupBook(libraryDir string, entry BookEntry) error {
 		}
 	}
 
-	// 3. Patch OPF (or regen on failure).
+	// 4. Patch OPF (or regen on failure).
 	opfPaths, _ := filepath.Glob(filepath.Join(dir, "*.opf"))
 	if len(opfPaths) > 0 {
 		best := metadata.ChooseBestOPF(opfPaths, entry.TitleFolder)
@@ -59,7 +95,7 @@ func CleanupBook(libraryDir string, entry BookEntry) error {
 	currentTitlePath := dir
 	currentAuthorFolder := entry.AuthorFolder
 
-	// 4. Rename title folder.
+	// 5. Rename title folder.
 	if expectedTitle != entry.TitleFolder {
 		newTitlePath := filepath.Join(libraryDir, currentAuthorFolder, expectedTitle)
 		if err := safeRename(currentTitlePath, newTitlePath); err != nil {
@@ -68,7 +104,7 @@ func CleanupBook(libraryDir string, entry BookEntry) error {
 		currentTitlePath = newTitlePath
 	}
 
-	// 5. Rename author folder.
+	// 6. Rename author folder.
 	if expectedAuthor != currentAuthorFolder {
 		oldAuthorPath := filepath.Join(libraryDir, currentAuthorFolder)
 		newAuthorPath := filepath.Join(libraryDir, expectedAuthor)
@@ -102,7 +138,7 @@ func CleanupAll(libraryDir string) (int, []string) {
 	cleaned := 0
 	var errs []string
 	for _, e := range entries {
-		if !e.NeedsRename {
+		if !e.NeedsRename && !e.NeedsFlat {
 			continue
 		}
 		if err := CleanupBook(libraryDir, e); err != nil {

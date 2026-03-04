@@ -1,6 +1,7 @@
 package library
 
 import (
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -36,6 +37,7 @@ type BookEntry struct {
 	Metadata       *metadata.Book `json:"metadata"`        // parsed metadata, never nil
 	MetadataSource string         `json:"metadata_source"` // "opf" | "abs_json" | "folder"
 	NeedsRename    bool           `json:"needs_rename"`
+	NeedsFlat      bool           `json:"needs_flat"` // true when files are nested in subdirectories
 	ExpectedAuthor string         `json:"expected_author"`
 	ExpectedTitle  string         `json:"expected_title"`
 	Files          FileInfo       `json:"files"`
@@ -86,6 +88,7 @@ func scanBook(path, authorFolder, titleFolder string) BookEntry {
 		Metadata:       book,
 		MetadataSource: source,
 		NeedsRename:    expectedAuthor != authorFolder || expectedTitle != titleFolder,
+		NeedsFlat:      hasNestedDirs(path),
 		ExpectedAuthor: expectedAuthor,
 		ExpectedTitle:  expectedTitle,
 		Files:          files,
@@ -125,25 +128,34 @@ func resolveMetadata(dir, titleFolder, authorFolder string, files FileInfo) (*me
 	return &metadata.Book{Title: titleFolder, Author: authorFolder}, "folder"
 }
 
-// collectFiles scans dir (non-recursively) and buckets file extensions.
-func collectFiles(dir string) FileInfo {
-	entries, err := os.ReadDir(dir)
+// hasNestedDirs reports whether dir contains at least one immediate subdirectory.
+func hasNestedDirs(dir string) bool {
+	entries, err := os.ReadDir(dir) //nolint:gosec
 	if err != nil {
-		return FileInfo{}
+		return false
 	}
+	for _, e := range entries {
+		if e.IsDir() {
+			return true
+		}
+	}
+	return false
+}
 
+// collectFiles walks dir recursively and buckets file extensions by category.
+func collectFiles(dir string) FileInfo {
 	audio := map[string]bool{}
 	meta := map[string]bool{}
 	images := map[string]bool{}
 	other := map[string]bool{}
 
-	for _, e := range entries {
-		if e.IsDir() {
-			continue
+	_ = filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error { //nolint:gosec
+		if err != nil || d.IsDir() {
+			return nil
 		}
-		ext := strings.ToLower(filepath.Ext(e.Name()))
+		ext := strings.ToLower(filepath.Ext(d.Name()))
 		if ext == "" {
-			continue
+			return nil
 		}
 		extNoDot := ext[1:]
 		switch {
@@ -158,7 +170,8 @@ func collectFiles(dir string) FileInfo {
 		default:
 			other[extNoDot] = true
 		}
-	}
+		return nil
+	})
 
 	return FileInfo{
 		Audio:    mapKeys(audio),
