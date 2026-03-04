@@ -167,7 +167,7 @@ func TestRequestCRUD(t *testing.T) {
 	}
 }
 
-func TestFailStuckMovingRequests(t *testing.T) {
+func TestFailStuckImportingRequests(t *testing.T) {
 	d := openTestDB(t)
 	ctx := context.Background()
 
@@ -176,7 +176,7 @@ func TestFailStuckMovingRequests(t *testing.T) {
 	}
 
 	statuses := []db.RequestStatus{
-		db.StatusPending, db.StatusDownloading, db.StatusMoving, db.StatusMoving, db.StatusDone, db.StatusFailed,
+		db.StatusPending, db.StatusDownloading, db.StatusImporting, db.StatusImporting, db.StatusDone, db.StatusFailed,
 	}
 	for i, s := range statuses {
 		id := fmt.Sprintf("r%d", i)
@@ -192,7 +192,7 @@ func TestFailStuckMovingRequests(t *testing.T) {
 		}
 	}
 
-	n, err := d.FailStuckMovingRequests(ctx)
+	n, err := d.FailStuckImportingRequests(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -200,7 +200,7 @@ func TestFailStuckMovingRequests(t *testing.T) {
 		t.Errorf("expected 2 rows affected, got %d", n)
 	}
 
-	// Both moving requests must now be failed with the expected error text.
+	// Both importing requests must now be failed with the expected error text.
 	for _, id := range []string{"r2", "r3"} {
 		req, err := d.GetRequest(ctx, id)
 		if err != nil {

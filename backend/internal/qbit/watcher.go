@@ -15,9 +15,9 @@ const (
 )
 
 // OnComplete is called when a torrent finishes downloading (progress ≥ 1.0).
-// It runs with the request already in status "moving". Returning a non-nil
+// It runs with the request already in status "importing". Returning a non-nil
 // error causes the request to be marked as failed with that error message.
-// Steps 6 and 7 (metadata, file move, Discord) are wired here.
+// Steps 6 and 7 (metadata, file import, Discord) are wired here.
 type OnComplete func(ctx context.Context, req *db.Request, info *TorrentInfo) error
 
 // OnFail is called when a request transitions to "failed" status, either
@@ -203,10 +203,10 @@ func readyToMove(state string) bool {
 }
 
 func (w *Watcher) handleComplete(ctx context.Context, requestID, hash string, info *TorrentInfo, watched map[string]*watchEntry) {
-	slog.Info("watcher: download complete, beginning move", "request_id", requestID)
+	slog.Info("watcher: download complete, beginning import", "request_id", requestID)
 
-	if err := w.db.UpdateRequestStatus(ctx, requestID, db.StatusMoving); err != nil {
-		slog.Error("watcher: set status moving", "request_id", requestID, "err", err)
+	if err := w.db.UpdateRequestStatus(ctx, requestID, db.StatusImporting); err != nil {
+		slog.Error("watcher: set status importing", "request_id", requestID, "err", err)
 		return
 	}
 	delete(watched, hash) // stop tracking; status is no longer "downloading"

@@ -273,8 +273,8 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	switch req.Status {
-	case db.StatusMoving:
-		// A goroutine is actively moving files; blocking deletion avoids a
+	case db.StatusImporting:
+		// A goroutine is actively importing files; blocking deletion avoids a
 		// silent update-on-deleted-row race.
 		respond.Error(w, http.StatusConflict, "request is currently being processed; wait for it to finish")
 		return
@@ -353,8 +353,8 @@ func (h *Handler) ListWatchDir(w http.ResponseWriter, r *http.Request) {
 }
 
 // Import handles POST /api/import. Admin only (enforced at router).
-// Creates a request record in "moving" status and asynchronously runs the
-// move pipeline (metadata lookup → file move → Discord notification).
+// Creates a request record in "importing" status and asynchronously runs the
+// import pipeline (metadata lookup → hardlink/copy to library → Discord notification).
 func (h *Handler) Import(w http.ResponseWriter, r *http.Request) {
 	if h.onImport == nil {
 		respond.Error(w, http.StatusNotImplemented, "import not configured")
@@ -380,7 +380,7 @@ func (h *Handler) Import(w http.ResponseWriter, r *http.Request) {
 		Author:      body.Author,
 		SearchQuery: body.Title + " " + body.Author,
 		TorrentName: sql.NullString{String: body.TorrentName, Valid: true},
-		Status:      db.StatusMoving,
+		Status:      db.StatusImporting,
 	}
 	if err := h.db.CreateRequest(r.Context(), req); err != nil {
 		slog.Error("import: create request", "user_id", claims.UserID, "err", err) //nolint:gosec

@@ -14,7 +14,7 @@ type RequestStatus string
 const (
 	StatusPending     RequestStatus = "pending"
 	StatusDownloading RequestStatus = "downloading"
-	StatusMoving      RequestStatus = "moving"
+	StatusImporting   RequestStatus = "importing"
 	StatusDone        RequestStatus = "done"
 	StatusFailed      RequestStatus = "failed"
 )
@@ -232,19 +232,19 @@ func (db *DB) ListTorrentNames(ctx context.Context) ([]string, error) {
 	return names, rows.Err()
 }
 
-// FailStuckMovingRequests updates all requests in "moving" status to "failed".
-// Called on server startup: the goroutine that performs the file move dies with
-// the process, so any request left in "moving" after a restart will never
+// FailStuckImportingRequests updates all requests in "importing" status to "failed".
+// Called on server startup: the goroutine that performs the file import dies with
+// the process, so any request left in "importing" after a restart will never
 // progress on its own.  Returns the number of rows affected.
-func (db *DB) FailStuckMovingRequests(ctx context.Context) (int64, error) {
+func (db *DB) FailStuckImportingRequests(ctx context.Context) (int64, error) {
 	res, err := db.ExecContext(ctx, `
 		UPDATE requests
 		SET status     = 'failed',
-		    error      = 'service restarted during file move',
+		    error      = 'service restarted during file import',
 		    updated_at = CURRENT_TIMESTAMP
-		WHERE status = 'moving'`)
+		WHERE status = 'importing'`)
 	if err != nil {
-		return 0, fmt.Errorf("fail stuck moving requests: %w", err)
+		return 0, fmt.Errorf("fail stuck importing requests: %w", err)
 	}
 	n, _ := res.RowsAffected()
 	return n, nil

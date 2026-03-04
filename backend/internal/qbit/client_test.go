@@ -231,14 +231,14 @@ func TestSetCategoryServerError(t *testing.T) {
 }
 
 func TestSetCategoryAutoCreateOnConflict(t *testing.T) {
-	var createCalled bool
+	var createCalled atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/api/v2/auth/login":
 			http.SetCookie(w, &http.Cookie{Name: "SID", Value: "test-sid"})
 			fmt.Fprint(w, "Ok.")
 		case "/api/v2/torrents/setCategory":
-			if !createCalled {
+			if createCalled.Load() == 0 {
 				// First call: category doesn't exist yet.
 				w.WriteHeader(http.StatusConflict)
 				return
@@ -246,7 +246,7 @@ func TestSetCategoryAutoCreateOnConflict(t *testing.T) {
 			// Second call (after auto-create): succeed.
 			w.WriteHeader(http.StatusOK)
 		case "/api/v2/torrents/createCategory":
-			createCalled = true
+			createCalled.Store(1)
 			w.WriteHeader(http.StatusOK)
 		default:
 			http.NotFound(w, r)
@@ -258,7 +258,7 @@ func TestSetCategoryAutoCreateOnConflict(t *testing.T) {
 	if err := c.SetCategory(context.Background(), "deadbeef", "new-category"); err != nil {
 		t.Fatalf("SetCategory: %v", err)
 	}
-	if !createCalled {
+	if createCalled.Load() == 0 {
 		t.Error("expected createCategory to be called on 409")
 	}
 }
