@@ -4,6 +4,7 @@
 	import { formatSize } from '$lib/utils';
 	import { Button } from '$lib/components/ui/button';
 	import { Badge } from '$lib/components/ui/badge';
+	import * as Dialog from '$lib/components/ui/dialog';
 
 	interface SearchResult {
 		id: string;
