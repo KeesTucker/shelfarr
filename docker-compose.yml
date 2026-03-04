@@ -1,50 +1,29 @@
 services:
   shelfarr:
+    container_name: shelfarr
     image: ghcr.io/keestucker/shelfarr:latest
     # build: .  # uncomment to build from source instead
-    user: "${PUID:-1000}:${PGID:-1000}"
     ports:
       - "8008:8008"
     volumes:
+      - ./downloads:/downloads
       - ./data:/data
-      - ./downloads:/downloads/audiobooks
       - ./library:/audiobooks
     environment:
-      # ── Database ──────────────────────────────────────────────────────────
-      DB_PATH: /data/shelfarr.db
-
-      # ── Prowlarr ──────────────────────────────────────────────────────────
       PROWLARR_URL: http://prowlarr:9696
       PROWLARR_API_KEY: ${PROWLARR_API_KEY}
-
-      # ── qBittorrent ───────────────────────────────────────────────────────
       QBIT_URL: http://qbittorrent:8080
       QBIT_USERNAME: ${QBIT_USERNAME}
       QBIT_PASSWORD: ${QBIT_PASSWORD}
       QBIT_CATEGORY: shelfarr
       # QBIT_IMPORTED_CATEGORY: shelfarr-imported  # optional: set this category on the torrent after the file is moved to the library
+      # Auto torrent management, enabling this will ensure qbit moves the files
+      # into corresponding folders based on category and status.
       QBIT_AUTO_TMM: "true"
-      QBIT_DELETE_ON_REQUEST_DELETE: ${QBIT_DELETE_ON_REQUEST_DELETE:-false}
-
-      # ── Library ───────────────────────────────────────────────────────────
-      LIBRARY_DIR: /audiobooks
-      # WATCH_DIR defaults to qBittorrent's save path (read via API at startup).
-      # Set explicitly only when using Syncthing from a remote seedbox.
-      WATCH_DIR: /downloads/audiobooks
       WATCH_TIMEOUT: 24h
-
-      # ── AudioBookShelf ────────────────────────────────────────────────────
-      ABS_URL: ${ABS_URL:-http://audiobookshelf:80}
-
-      # ── Discord ───────────────────────────────────────────────────────────
+      ABS_URL: http://audiobookshelf:80
       DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL:-}
-
-      # ── Auth ──────────────────────────────────────────────────────────────
       JWT_SECRET: ${JWT_SECRET}
-      JWT_EXPIRY: 24h
       # COOKIE_INSECURE: "true"  # uncomment only for local dev over plain HTTP (no HTTPS/Cloudflare)
-
-      # ── Server ────────────────────────────────────────────────────────────
-      PORT: "8008"
-      STATIC_DIR: /app/static
+    user: "${PUID:-1000}:${PGID:-1000}"
     restart: always
