@@ -116,10 +116,10 @@ func CleanupAll(libraryDir string) (int, []string) {
 
 // safeRename performs os.Rename but checks that the source exists first.
 func safeRename(src, dst string) error {
-	if _, err := os.Stat(src); err != nil {
+	if _, err := os.Stat(src); err != nil { //nolint:gosec // paths built from libraryDir+sanitizeName
 		return fmt.Errorf("source not found: %w", err)
 	}
-	return os.Rename(src, dst)
+	return os.Rename(src, dst) //nolint:gosec // paths built from libraryDir+sanitizeName
 }
 
 // listAudioFiles returns absolute paths of all audio files directly in dir.
