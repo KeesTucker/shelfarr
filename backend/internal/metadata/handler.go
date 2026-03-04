@@ -29,7 +29,7 @@ func (h *Handler) Search(w http.ResponseWriter, r *http.Request) {
 
 	books, err := h.client.Search(r.Context(), title, author)
 	if err != nil {
-		slog.Warn("metadata: search failed", "title", title, "author", author, "err", err)
+		slog.Warn("metadata: search failed", "err", err)
 		// Return empty list rather than an error — search is best-effort.
 		respond.JSON(w, http.StatusOK, []Book{})
 		return
