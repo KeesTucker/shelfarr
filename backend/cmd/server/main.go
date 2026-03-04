@@ -139,7 +139,14 @@ func run() error {
 			slog.Warn("metadata: write OPF", "request_id", req.ID, "path", finalPath, "err", err)
 		}
 
-		// 4. Discord success notification (best-effort).
+		// 4. Set the "imported" category in qBittorrent (best-effort).
+		if cfg.QBitImportedCategory != "" && info.Hash != "" {
+			if err := qbitClient.SetCategory(ctx, info.Hash, cfg.QBitImportedCategory); err != nil {
+				slog.Warn("qbit: set imported category", "request_id", req.ID, "hash", info.Hash, "err", err)
+			}
+		}
+
+		// 5. Discord success notification (best-effort).
 		if err := discord.NotifyComplete(ctx, cfg.DiscordWebhookURL, book,
 			lookupUsername(ctx, req.UserID), finalPath); err != nil {
 			slog.Warn("discord notify complete", "request_id", req.ID, "err", err)

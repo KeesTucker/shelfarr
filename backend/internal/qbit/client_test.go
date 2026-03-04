@@ -168,6 +168,68 @@ func TestGetTorrentNotConfigured(t *testing.T) {
 	}
 }
 
+// ── SetCategory ───────────────────────────────────────────────────────────────
+
+func TestSetCategoryHappyPath(t *testing.T) {
+	var gotHash, gotCategory string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v2/auth/login":
+			http.SetCookie(w, &http.Cookie{Name: "SID", Value: "test-sid"})
+			fmt.Fprint(w, "Ok.")
+		case "/api/v2/torrents/setCategory":
+			if err := r.ParseForm(); err != nil {
+				http.Error(w, "bad form", http.StatusBadRequest)
+				return
+			}
+			gotHash = r.FormValue("hashes")
+			gotCategory = r.FormValue("category")
+			w.WriteHeader(http.StatusOK)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	c := New(srv.URL, "admin", "pass")
+	if err := c.SetCategory(context.Background(), "deadbeef", "imported"); err != nil {
+		t.Fatalf("SetCategory: %v", err)
+	}
+	if gotHash != "deadbeef" {
+		t.Errorf("hashes form field = %q; want %q", gotHash, "deadbeef")
+	}
+	if gotCategory != "imported" {
+		t.Errorf("category form field = %q; want %q", gotCategory, "imported")
+	}
+}
+
+func TestSetCategoryNotConfigured(t *testing.T) {
+	c := New("", "admin", "pass")
+	if err := c.SetCategory(context.Background(), "deadbeef", "imported"); err == nil {
+		t.Fatal("expected error when QBIT_URL is empty")
+	}
+}
+
+func TestSetCategoryServerError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v2/auth/login":
+			http.SetCookie(w, &http.Cookie{Name: "SID", Value: "test-sid"})
+			fmt.Fprint(w, "Ok.")
+		case "/api/v2/torrents/setCategory":
+			http.Error(w, "Conflict", http.StatusConflict)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	c := New(srv.URL, "admin", "pass")
+	if err := c.SetCategory(context.Background(), "deadbeef", "nonexistent-category"); err == nil {
+		t.Fatal("expected error on non-200 response")
+	}
+}
+
 // ── session re-login ──────────────────────────────────────────────────────────
 
 // TestSessionReloginOn403 verifies that when qBittorrent returns 403 (session

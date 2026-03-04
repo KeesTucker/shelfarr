@@ -23,6 +23,7 @@ type Config struct {
 	QBitUsername              string
 	QBitPassword              string
 	QBitCategory              string
+	QBitImportedCategory      string // QBIT_IMPORTED_CATEGORY — set after file is moved to library
 	QBitAutoTMM               bool
 	QBitDeleteOnRequestDelete bool // QBIT_DELETE_ON_REQUEST_DELETE
 
@@ -82,6 +83,7 @@ func Load() (*Config, error) {
 		QBitUsername:              getenv("QBIT_USERNAME", "admin"),
 		QBitPassword:              getenv("QBIT_PASSWORD", ""),
 		QBitCategory:              getenv("QBIT_CATEGORY", ""),
+		QBitImportedCategory:      getenv("QBIT_IMPORTED_CATEGORY", ""),
 		QBitAutoTMM:               os.Getenv("QBIT_AUTO_TMM") == "true",
 		QBitDeleteOnRequestDelete: os.Getenv("QBIT_DELETE_ON_REQUEST_DELETE") == "true",
 		WatchDir:                  getenv("WATCH_DIR", ""),
