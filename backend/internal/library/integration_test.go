@@ -69,12 +69,12 @@ func TestIntegration_Move_SingleFile(t *testing.T) {
 	if _, err := os.Stat(finalPath); err != nil {
 		t.Errorf("final path does not exist: %v", err)
 	}
-	// Path must include Author and Title (Year) components.
+	// Path must include Author and Title components (year is not appended).
 	if !strings.Contains(finalPath, "Brandon Sanderson") {
 		t.Errorf("finalPath=%q; expected to contain author name", finalPath)
 	}
-	if !strings.Contains(finalPath, "The Final Empire (2006)") {
-		t.Errorf("finalPath=%q; expected to contain title and year", finalPath)
+	if !strings.Contains(finalPath, "The Final Empire") {
+		t.Errorf("finalPath=%q; expected to contain title", finalPath)
 	}
 }
 
@@ -90,12 +90,20 @@ func TestIntegration_Move_Directory(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// All chapter files land flat in destDir regardless of subdirectory nesting
+	// in the source torrent (linkFlat strips subdirectory structure).
 	files := []struct{ rel, content string }{
+		{"chapter01.mp3", "audio ch1"},
+		{"chapter02.mp3", "audio ch2"},
+		{"chapter03.mp3", "audio ch3"}, // was in disc1/ — flattened by linkFlat
+	}
+	// Write source files; chapter03.mp3 lives under disc1/ in the torrent.
+	srcFiles := []struct{ rel, content string }{
 		{"chapter01.mp3", "audio ch1"},
 		{"chapter02.mp3", "audio ch2"},
 		{filepath.Join("disc1", "chapter03.mp3"), "audio ch3"},
 	}
-	for _, f := range files {
+	for _, f := range srcFiles {
 		if err := os.WriteFile(filepath.Join(src, f.rel), []byte(f.content), 0o644); err != nil {
 			t.Fatal(err)
 		}
@@ -110,7 +118,7 @@ func TestIntegration_Move_Directory(t *testing.T) {
 	}
 	t.Logf("moved to: %s", finalPath)
 
-	// Every file must be at the destination with its content intact.
+	// Every file must be directly in finalPath (flat) with its content intact.
 	for _, f := range files {
 		p := filepath.Join(finalPath, f.rel)
 		data, err := os.ReadFile(p)
@@ -123,9 +131,9 @@ func TestIntegration_Move_Directory(t *testing.T) {
 		}
 	}
 
-	// Source directory must be removed after a successful move.
-	if _, err := os.Stat(src); !os.IsNotExist(err) {
-		t.Error("source directory should have been removed after move")
+	// Source directory is kept (hard-link semantics; qBit manages its own cleanup).
+	if _, err := os.Stat(src); err != nil {
+		t.Errorf("source directory should still exist after link: %v", err)
 	}
 }
 

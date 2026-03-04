@@ -237,7 +237,7 @@ func TestLinkFlat_NestedDirs(t *testing.T) {
 	}
 }
 
-func TestLinkFlat_DuplicateNameSkipped(t *testing.T) {
+func TestLinkFlat_DuplicateNamePrefixed(t *testing.T) {
 	dir := t.TempDir()
 	src := filepath.Join(dir, "book")
 	dst := filepath.Join(dir, "dest")
@@ -250,7 +250,8 @@ func TestLinkFlat_DuplicateNameSkipped(t *testing.T) {
 	if err := os.MkdirAll(dst, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	// Same filename in two different subdirs.
+	// Same filename in two different subdirs — simulates multi-disc torrents
+	// that reuse track numbers (e.g. disc1/01.mp3, disc2/01.mp3).
 	if err := os.WriteFile(filepath.Join(src, "disc1", "cover.jpg"), []byte("first"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -262,13 +263,22 @@ func TestLinkFlat_DuplicateNameSkipped(t *testing.T) {
 		t.Fatalf("linkFlat with duplicate: %v", err)
 	}
 
-	// First one wins; file must exist.
-	got, err := os.ReadFile(filepath.Join(dst, "cover.jpg"))
+	// First occurrence lands under its original name.
+	got1, err := os.ReadFile(filepath.Join(dst, "cover.jpg"))
 	if err != nil {
 		t.Fatalf("cover.jpg missing: %v", err)
 	}
-	if string(got) != "first" {
-		t.Errorf("cover.jpg content=%q; want %q", got, "first")
+	if string(got1) != "first" {
+		t.Errorf("cover.jpg content=%q; want %q", got1, "first")
+	}
+
+	// Second occurrence must be renamed with the parent directory prefix.
+	got2, err := os.ReadFile(filepath.Join(dst, "disc2 - cover.jpg"))
+	if err != nil {
+		t.Fatalf("disc2 - cover.jpg missing: %v", err)
+	}
+	if string(got2) != "second" {
+		t.Errorf("disc2 - cover.jpg content=%q; want %q", got2, "second")
 	}
 }
 

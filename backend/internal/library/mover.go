@@ -190,8 +190,21 @@ func linkFlat(src, dst string) error {
 		}
 		target := filepath.Join(dst, d.Name())
 		if _, statErr := os.Stat(target); statErr == nil {
-			slog.Warn("library: skipping duplicate filename", "file", d.Name(), "src", path)
-			return nil
+			// Filename collision: prefix with the relative parent directory to
+			// avoid dropping files (common in multi-disc torrents where each
+			// disc reuses track numbers like "01.mp3").
+			rel, relErr := filepath.Rel(src, filepath.Dir(path))
+			if relErr != nil || rel == "." {
+				slog.Warn("library: skipping top-level duplicate filename", "file", d.Name(), "src", path)
+				return nil
+			}
+			prefix := sanitizeName(strings.ReplaceAll(rel, string(filepath.Separator), " - "))
+			target = filepath.Join(dst, prefix+" - "+d.Name())
+			if _, statErr2 := os.Stat(target); statErr2 == nil {
+				slog.Warn("library: skipping duplicate filename even with prefix", "file", d.Name(), "src", path)
+				return nil
+			}
+			slog.Info("library: renamed duplicate to avoid collision", "new_name", filepath.Base(target), "src", path)
 		}
 		return linkOneFile(path, target, fi.Mode())
 	})
