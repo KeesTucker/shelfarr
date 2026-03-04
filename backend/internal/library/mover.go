@@ -65,6 +65,11 @@ func (m *Mover) Move(ctx context.Context, torrentName string, book *metadata.Boo
 	}
 
 	slog.Info("library: link complete", "dest", destDir)
+
+	if _, err := pruneEmptyDirs(m.libraryDir); err != nil {
+		slog.Warn("library: prune empty dirs", "err", err)
+	}
+
 	return destDir, nil
 }
 
@@ -163,6 +168,36 @@ func sanitizeName(s string) string {
 
 // ── file operations ───────────────────────────────────────────────────────────
 
+// pruneEmptyDirs removes empty directories under root (but not root itself).
+// It collects all subdirectories first, then processes them deepest-first so
+// that removing a leaf can cascade to its now-empty parent.
+// Returns the number of directories successfully removed.
+func pruneEmptyDirs(root string) (int, error) {
+	var dirs []string
+	if err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil || path == root || !d.IsDir() {
+			return nil
+		}
+		dirs = append(dirs, path)
+		return nil
+	}); err != nil {
+		return 0, err
+	}
+	removed := 0
+	for i := len(dirs) - 1; i >= 0; i-- {
+		entries, err := os.ReadDir(dirs[i])
+		if err != nil || len(entries) > 0 {
+			continue
+		}
+		if err := os.Remove(dirs[i]); err != nil {
+			slog.Warn("library: remove empty dir", "path", dirs[i], "err", err)
+		} else {
+			removed++
+		}
+	}
+	return removed, nil
+}
+
 // linkFlat links every regular file under src directly into dst, stripping all
 // subdirectory nesting. dst must already exist. For each file it tries
 // os.Link first (instant, same-device hard link) and falls back to copyFile.
@@ -213,17 +248,19 @@ func linkFlat(src, dst string) error {
 		}
 		for _, e := range entries {
 			rel, relErr := filepath.Rel(src, filepath.Dir(e.path))
+			var target string
 			if relErr != nil || rel == "." {
-				slog.Warn("library: skipping top-level duplicate filename", "file", name, "src", e.path)
-				continue
+				// Top-level file: keep the unprefixed name as its canonical slot.
+				target = filepath.Join(dst, name)
+			} else {
+				prefix := sanitizeName(strings.ReplaceAll(rel, string(filepath.Separator), " - "))
+				target = filepath.Join(dst, prefix+" - "+name)
+				slog.Info("library: renamed duplicate to avoid collision", "new_name", filepath.Base(target), "src", e.path)
 			}
-			prefix := sanitizeName(strings.ReplaceAll(rel, string(filepath.Separator), " - "))
-			target := filepath.Join(dst, prefix+" - "+name)
 			if _, statErr := os.Stat(target); statErr == nil {
 				slog.Warn("library: skipping duplicate filename even with prefix", "file", name, "src", e.path)
 				continue
 			}
-			slog.Info("library: renamed duplicate to avoid collision", "new_name", filepath.Base(target), "src", e.path)
 			if err := linkOneFile(e.path, target, e.mode); err != nil {
 				return err
 			}

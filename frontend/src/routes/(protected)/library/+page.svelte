@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { Loader2, CheckCircle2, AlertTriangle, Wand2 } from 'lucide-svelte';
+	import { Loader2, CheckCircle2, AlertTriangle, Wand2, Trash2 } from 'lucide-svelte';
 	import { api } from '$lib/api';
 	import { authStore } from '$lib/auth.svelte';
 	import { Button } from '$lib/components/ui/button';
@@ -42,6 +42,7 @@
 
 	let cleaning = $state<Set<string>>(new Set());
 	let cleaningAll = $state(false);
+	let pruning = $state(false);
 
 	let toast = $state<{ message: string; type: 'success' | 'error' } | null>(null);
 	let toastTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -87,6 +88,24 @@
 			const next = new Set(cleaning);
 			next.delete(key);
 			cleaning = next;
+		}
+	}
+
+	async function pruneEmptyDirs() {
+		pruning = true;
+		try {
+			const res = await api.post<{ removed: number }>('/api/library/prune', {});
+			showToast(
+				res.removed === 0
+					? 'No empty directories found'
+					: `Removed ${res.removed} empty director${res.removed !== 1 ? 'ies' : 'y'}`,
+				'success'
+			);
+			await load();
+		} catch (e) {
+			showToast(e instanceof Error ? e.message : 'Prune failed', 'error');
+		} finally {
+			pruning = false;
 		}
 	}
 
@@ -137,17 +156,28 @@
 				</p>
 			{/if}
 		</div>
-		{#if needsRenameCount > 0}
-			<Button onclick={cleanAll} disabled={cleaningAll}>
-				{#if cleaningAll}
+		<div class="flex items-center gap-2">
+			<Button variant="outline" onclick={pruneEmptyDirs} disabled={pruning}>
+				{#if pruning}
 					<Loader2 class="w-4 h-4 mr-2 animate-spin" />
-					Cleaning…
+					Pruning…
 				{:else}
-					<Wand2 class="w-4 h-4 mr-2" />
-					Clean all ({needsRenameCount})
+					<Trash2 class="w-4 h-4 mr-2" />
+					Prune empty dirs
 				{/if}
 			</Button>
-		{/if}
+			{#if needsRenameCount > 0}
+				<Button onclick={cleanAll} disabled={cleaningAll}>
+					{#if cleaningAll}
+						<Loader2 class="w-4 h-4 mr-2 animate-spin" />
+						Cleaning…
+					{:else}
+						<Wand2 class="w-4 h-4 mr-2" />
+						Clean all ({needsRenameCount})
+					{/if}
+				</Button>
+			{/if}
+		</div>
 	</div>
 
 	{#if loading}

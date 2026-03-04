@@ -247,6 +247,7 @@ func buildRouter(database *db.DB, tokenCfg auth.TokenConfig, absClient *abs.Clie
 			r.Post("/api/import", requestsHandler.Import)
 			r.Get("/api/library", libraryHandler.List)
 			r.Post("/api/library/cleanup", libraryHandler.Cleanup)
+			r.Post("/api/library/prune", libraryHandler.Prune)
 		})
 	})
 
