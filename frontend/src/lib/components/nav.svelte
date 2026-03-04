@@ -25,6 +25,13 @@
 				size="sm"
 				onclick={() => goto('/requests')}
 			>{authStore.isAdmin ? 'All Requests' : 'My Requests'}</Button>
+			{#if authStore.isAdmin}
+				<Button
+					variant={$page.url.pathname === '/library' ? 'default' : 'ghost'}
+					size="sm"
+					onclick={() => goto('/library')}
+				>Library</Button>
+			{/if}
 
 			{#if authStore.user}
 				<span class="text-sm text-zinc-500 hidden sm:inline">{authStore.user.username}</span>

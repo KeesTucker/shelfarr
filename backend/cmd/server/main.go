@@ -82,6 +82,7 @@ func run() error {
 		watchDir = wd
 	}
 	mover := library.New(watchDir, cfg.LibraryDir, cfg.WatchTimeout)
+	libraryHandler := library.NewHandler(cfg.LibraryDir)
 
 	// lookupUsername returns the username for a user ID, falling back to the
 	// raw ID if the DB lookup fails (e.g. user deleted between request and completion).
@@ -174,7 +175,7 @@ func run() error {
 	requestsHandler.SetImportConfig(ctx, watchDir, onImportFn, onFail)
 	metaHandler := metadata.NewHandler(metaClient)
 
-	r := buildRouter(database, tokenCfg, absClient, prowlarrClient, requestsHandler, metaHandler, cfg.StaticDir)
+	r := buildRouter(database, tokenCfg, absClient, prowlarrClient, requestsHandler, metaHandler, libraryHandler, cfg.StaticDir)
 
 	slog.Info("server listening", "port", cfg.Port)
 	srv := &http.Server{
@@ -213,7 +214,7 @@ func run() error {
 
 // buildRouter wires all routes. Auth-protected routes are added in a sub-router
 // that applies the Authenticate middleware.
-func buildRouter(database *db.DB, tokenCfg auth.TokenConfig, absClient *abs.Client, prowlarrClient *prowlarr.Client, requestsHandler *requests.Handler, metaHandler *metadata.Handler, staticDir string) http.Handler {
+func buildRouter(database *db.DB, tokenCfg auth.TokenConfig, absClient *abs.Client, prowlarrClient *prowlarr.Client, requestsHandler *requests.Handler, metaHandler *metadata.Handler, libraryHandler *library.Handler, staticDir string) http.Handler {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
@@ -238,11 +239,13 @@ func buildRouter(database *db.DB, tokenCfg auth.TokenConfig, absClient *abs.Clie
 		r.Get("/api/requests/{id}", requestsHandler.Get)
 		r.Delete("/api/requests/{id}", requestsHandler.Delete)
 
-		// Admin-only import routes.
+		// Admin-only routes.
 		r.Group(func(r chi.Router) {
 			r.Use(auth.RequireAdmin)
 			r.Get("/api/watchdir", requestsHandler.ListWatchDir)
 			r.Post("/api/import", requestsHandler.Import)
+			r.Get("/api/library", libraryHandler.List)
+			r.Post("/api/library/cleanup", libraryHandler.Cleanup)
 		})
 	})
 
