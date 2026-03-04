@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { Loader2, CheckCircle2, AlertTriangle, Wand2, Trash2 } from 'lucide-svelte';
+	import { Loader2, CheckCircle2, AlertTriangle, Wand2, Trash2, RefreshCw } from 'lucide-svelte';
 	import { api } from '$lib/api';
 	import { authStore } from '$lib/auth.svelte';
 	import { Button } from '$lib/components/ui/button';
@@ -26,6 +26,7 @@
 		metadata: BookMeta;
 		metadata_source: 'opf' | 'abs_json' | 'folder';
 		needs_rename: boolean;
+		needs_flat: boolean;
 		expected_author: string;
 		expected_title: string;
 		files: FileInfo;
@@ -140,7 +141,7 @@
 		return 'folder';
 	}
 
-	const needsRenameCount = $derived(books.filter((b) => b.needs_rename).length);
+	const needsCleanupCount = $derived(books.filter((b) => b.needs_rename || b.needs_flat).length);
 </script>
 
 <main class="mx-auto max-w-6xl px-4 py-8">
@@ -150,13 +151,16 @@
 			{#if !loading && !error}
 				<p class="text-xs text-zinc-500 mt-1">
 					{books.length} book{books.length !== 1 ? 's' : ''}
-					{#if needsRenameCount > 0}
-						· <span class="text-amber-400">{needsRenameCount} need{needsRenameCount !== 1 ? '' : 's'} cleanup</span>
+					{#if needsCleanupCount > 0}
+						· <span class="text-amber-400">{needsCleanupCount} need{needsCleanupCount !== 1 ? '' : 's'} cleanup</span>
 					{/if}
 				</p>
 			{/if}
 		</div>
 		<div class="flex items-center gap-2">
+			<Button variant="outline" onclick={load} disabled={loading}>
+				<RefreshCw class="w-4 h-4 {loading ? 'animate-spin' : ''}" />
+			</Button>
 			<Button variant="outline" onclick={pruneEmptyDirs} disabled={pruning}>
 				{#if pruning}
 					<Loader2 class="w-4 h-4 mr-2 animate-spin" />
@@ -166,14 +170,14 @@
 					Prune empty dirs
 				{/if}
 			</Button>
-			{#if needsRenameCount > 0}
+			{#if needsCleanupCount > 0}
 				<Button onclick={cleanAll} disabled={cleaningAll}>
 					{#if cleaningAll}
 						<Loader2 class="w-4 h-4 mr-2 animate-spin" />
 						Cleaning…
 					{:else}
 						<Wand2 class="w-4 h-4 mr-2" />
-						Clean all ({needsRenameCount})
+						Clean all ({needsCleanupCount})
 					{/if}
 				</Button>
 			{/if}
@@ -249,6 +253,11 @@
 											<AlertTriangle class="w-3.5 h-3.5 shrink-0" />
 											<span class="text-xs">Mismatch</span>
 										</div>
+									{:else if book.needs_flat}
+										<div class="flex items-center gap-1.5 text-blue-400">
+											<AlertTriangle class="w-3.5 h-3.5 shrink-0" />
+											<span class="text-xs">Nested</span>
+										</div>
 									{:else}
 										<div class="flex items-center gap-1.5 text-green-500">
 											<CheckCircle2 class="w-3.5 h-3.5 shrink-0" />
@@ -259,7 +268,7 @@
 								<td class="px-2 py-3">
 									<button
 										class="flex items-center gap-1.5 px-2.5 py-1 rounded text-xs text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-										disabled={!book.needs_rename || isCleaning}
+										disabled={!book.needs_rename && !book.needs_flat || isCleaning}
 										onclick={() => cleanBook(book)}
 										title="Clean up this book"
 									>

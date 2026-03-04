@@ -228,3 +228,91 @@ func TestCleanupBook_RenamesSingleAudioFile(t *testing.T) {
 		t.Error("old audio filename should not exist after rename")
 	}
 }
+
+func TestFlattenBookDir_FlattensSubdirs(t *testing.T) {
+	dir := t.TempDir()
+	titleDir := filepath.Join(dir, "The Book")
+	if err := os.MkdirAll(filepath.Join(titleDir, "disc1"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(titleDir, "disc2"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(titleDir, "disc1", "01.mp3"), []byte("d1ch1"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(titleDir, "disc2", "01.mp3"), []byte("d2ch1"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(titleDir, "disc1", "02.mp3"), []byte("d1ch2"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := flattenBookDir(titleDir); err != nil {
+		t.Fatalf("flattenBookDir: %v", err)
+	}
+
+	// Subdirs must be gone.
+	if hasNestedDirs(titleDir) {
+		t.Error("title dir should have no subdirs after flatten")
+	}
+	// 01.mp3 appears in both discs → both prefixed; 02.mp3 is unique → no prefix.
+	for _, want := range []string{"disc1 - 01.mp3", "disc2 - 01.mp3", "02.mp3"} {
+		if _, err := os.Stat(filepath.Join(titleDir, want)); err != nil {
+			t.Errorf("expected file %q: %v", want, err)
+		}
+	}
+}
+
+func TestCleanupBook_FlattensNestedDirs(t *testing.T) {
+	libDir := t.TempDir()
+	titlePath := filepath.Join(libDir, "Frank Herbert", "Dune")
+	if err := os.MkdirAll(filepath.Join(titlePath, "part1"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(titlePath, "part1", "ch1.mp3"), []byte("audio"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	entry := BookEntry{
+		AuthorFolder: "Frank Herbert",
+		TitleFolder:  "Dune",
+		Path:         titlePath,
+		NeedsFlat:    true,
+		Metadata:     &metadata.Book{Title: "Dune", Author: "Frank Herbert"},
+	}
+	if err := CleanupBook(libDir, entry); err != nil {
+		t.Fatalf("CleanupBook: %v", err)
+	}
+	if hasNestedDirs(titlePath) {
+		t.Error("title dir should be flat after cleanup")
+	}
+	// Single audio file gets renamed to the title name by CleanupBook step 3.
+	if _, err := os.Stat(filepath.Join(titlePath, "Dune.mp3")); err != nil {
+		t.Errorf("flattened+renamed audio file Dune.mp3 should exist: %v", err)
+	}
+}
+
+func TestCleanupAll_FlattensNestedDirs(t *testing.T) {
+	libDir := t.TempDir()
+	titlePath := filepath.Join(libDir, "Frank Herbert", "Dune")
+	if err := os.MkdirAll(filepath.Join(titlePath, "part1"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Use two audio files so single-file rename doesn't apply — keeps the test
+	// focused on flattening rather than renaming.
+	for _, name := range []string{"ch1.mp3", "ch2.mp3"} {
+		if err := os.WriteFile(filepath.Join(titlePath, "part1", name), []byte("audio"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cleaned, errs := CleanupAll(libDir)
+	if len(errs) != 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+	if cleaned != 1 {
+		t.Errorf("expected 1 cleaned, got %d", cleaned)
+	}
+	if hasNestedDirs(titlePath) {
+		t.Error("title dir should be flat after CleanupAll")
+	}
+}

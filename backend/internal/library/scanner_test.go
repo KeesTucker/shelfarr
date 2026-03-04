@@ -253,3 +253,65 @@ func TestCollectFiles_SkipsNoExtension(t *testing.T) {
 		t.Errorf("file with no extension should be skipped; Other=%v", fi.Other)
 	}
 }
+
+func TestHasNestedDirs_True(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, "subdir"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if !hasNestedDirs(dir) {
+		t.Error("expected true when subdir exists")
+	}
+}
+
+func TestHasNestedDirs_False(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "ch.mp3"), []byte("audio"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if hasNestedDirs(dir) {
+		t.Error("expected false when no subdirs exist")
+	}
+}
+
+func TestScanBook_NeedsFlatWhenSubdirsPresent(t *testing.T) {
+	libDir := t.TempDir()
+	titlePath := filepath.Join(libDir, "Some Author", "Some Book")
+	if err := os.MkdirAll(filepath.Join(titlePath, "disc1"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(titlePath, "disc1", "ch.mp3"), []byte("audio"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	entries, err := ScanLibrary(libDir)
+	if err != nil {
+		t.Fatalf("ScanLibrary: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 entry, got %d", len(entries))
+	}
+	if !entries[0].NeedsFlat {
+		t.Error("NeedsFlat should be true when title folder contains subdirectories")
+	}
+}
+
+func TestScanBook_NeedsFlatFalseWhenFlat(t *testing.T) {
+	libDir := t.TempDir()
+	titlePath := filepath.Join(libDir, "Some Author", "Some Book")
+	if err := os.MkdirAll(titlePath, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(titlePath, "ch.mp3"), []byte("audio"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	entries, err := ScanLibrary(libDir)
+	if err != nil {
+		t.Fatalf("ScanLibrary: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 entry, got %d", len(entries))
+	}
+	if entries[0].NeedsFlat {
+		t.Error("NeedsFlat should be false when all files are at top level")
+	}
+}
