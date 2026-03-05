@@ -188,6 +188,7 @@ func (c *Client) SetCategory(ctx context.Context, hash, category string) error {
 			return fmt.Errorf("qbit set category (retry): %w", err)
 		}
 		defer func() { _ = resp2.Body.Close() }()
+		_, _ = io.Copy(io.Discard, resp2.Body) // drain so the connection is returned to the pool
 		if resp2.StatusCode != http.StatusOK {
 			return fmt.Errorf("qbit set category (retry): unexpected status %d", resp2.StatusCode)
 		}

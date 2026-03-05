@@ -6,7 +6,7 @@
 </script>
 
 <nav class="sticky top-0 z-10 border-b border-zinc-800 bg-zinc-900">
-	<div class="mx-auto max-w-5xl px-4 h-14 flex items-center justify-between">
+	<div class="mx-auto max-w-5xl px-4 py-2 flex flex-wrap items-center justify-between gap-y-2">
 		<!-- Brand -->
 		<div class="flex items-center gap-2 select-none">
 			<span aria-hidden="true" class="text-xl">📚</span>
@@ -14,7 +14,7 @@
 		</div>
 
 		<!-- Right side -->
-		<div class="flex items-center gap-3">
+		<div class="flex items-center flex-wrap gap-2">
 			<Button
 				variant={$page.url.pathname === '/' ? 'default' : 'ghost'}
 				size="sm"
