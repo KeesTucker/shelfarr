@@ -69,19 +69,10 @@ func run() error {
 
 	metaClient := metadata.New()
 
-	watchDir := cfg.WatchDir
-	if watchDir == "" {
-		if cfg.QBitAutoTMM {
-			return fmt.Errorf("WATCH_DIR must be set when QBIT_AUTO_TMM=true (qBittorrent routes files via category save paths, not the global default)")
-		}
-		wd, err := qbitClient.GetDefaultSavePath(ctx)
-		if err != nil {
-			return fmt.Errorf("WATCH_DIR not set and could not read save path from qBittorrent: %w", err)
-		}
-		slog.Info("resolved watch dir from qBittorrent", "path", wd)
-		watchDir = wd
+	if cfg.WatchDir == "" {
+		return fmt.Errorf("WATCH_DIR must be set")
 	}
-	mover := library.New(watchDir, cfg.LibraryDir, cfg.WatchTimeout)
+	mover := library.New(cfg.WatchDir, cfg.LibraryDir, cfg.WatchTimeout)
 	libraryHandler := library.NewHandler(cfg.LibraryDir)
 
 	// lookupUsername returns the username for a user ID, falling back to the
@@ -180,7 +171,7 @@ func run() error {
 
 	requestsHandler := requests.New(database, prowlarrClient, qbitClient, cfg.QBitCategory)
 	requestsHandler.SetDeleteTorrentsOnRequestDelete(cfg.QBitDeleteOnRequestDelete)
-	requestsHandler.SetImportConfig(ctx, watchDir, onImportFn, onFail)
+	requestsHandler.SetImportConfig(ctx, cfg.WatchDir, onImportFn, onFail)
 	metaHandler := metadata.NewHandler(metaClient)
 
 	r := buildRouter(database, tokenCfg, absClient, prowlarrClient, requestsHandler, metaHandler, libraryHandler, cfg.StaticDir)

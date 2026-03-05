@@ -87,7 +87,7 @@ func Load() (*Config, error) {
 		QBitAutoTMM:               os.Getenv("QBIT_AUTO_TMM") == "true",
 		QBitDeleteOnRequestDelete: os.Getenv("QBIT_DELETE_ON_REQUEST_DELETE") == "true",
 		WatchDir:                  getenv("WATCH_DIR", ""),
-		LibraryDir:                getenv("LIBRARY_DIR", "/audiobooks"),
+		LibraryDir:                getenv("LIBRARY_DIR", "/books"),
 		WatchTimeout:              watchTimeout,
 		ABSURL:                    absURL,
 		DiscordWebhookURL:         getenv("DISCORD_WEBHOOK_URL", ""),
