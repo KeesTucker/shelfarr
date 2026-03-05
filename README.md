@@ -24,7 +24,10 @@ stack:
 
 
 integration:
-- audiobookshelf for auth (req)
+- audiobookshelf for credential checking (req)
 - prowlarr (req)
 - qbit (req)
 - discord webhooks
+
+auth:
+- http only secure cookie
