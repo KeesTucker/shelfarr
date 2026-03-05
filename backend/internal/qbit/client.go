@@ -193,8 +193,6 @@ func (c *Client) SetCategory(ctx context.Context, hash, category string) error {
 		}
 		return nil
 	}
-		return nil
-	}
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("qbit set category: unexpected status %d", resp.StatusCode)
@@ -226,6 +224,7 @@ func (c *Client) createCategory(ctx context.Context, category string) error {
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusConflict {
 		return fmt.Errorf("unexpected status %d", resp.StatusCode)
 	}
+	_, _ = io.Copy(io.Discard, resp.Body) // drain so the connection is returned to the pool
 	return nil
 }
 
