@@ -3,11 +3,13 @@
 	import { goto } from '$app/navigation';
 	import { Loader2, CheckCircle2, AlertTriangle, Wand2, Trash2, RefreshCw } from 'lucide-svelte';
 	import { api } from '$lib/api';
+	import { fileTypeClass } from '$lib/utils';
 	import { authStore } from '$lib/auth.svelte';
 	import { Button } from '$lib/components/ui/button';
 
 	interface FileInfo {
 		audio: string[] | null;
+		ebook: string[] | null;
 		metadata: string[] | null;
 		images: string[] | null;
 		other: string[] | null;
@@ -231,16 +233,19 @@
 								<td class="px-4 py-3 hidden md:table-cell">
 									<div class="flex flex-wrap gap-1">
 										{#each book.files.audio ?? [] as ext}
-											<span class="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium bg-blue-950 text-blue-300 border border-blue-800">{ext}</span>
+											<span class="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium {fileTypeClass('audio')}">{ext}</span>
+										{/each}
+										{#each book.files.ebook ?? [] as ext}
+											<span class="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium {fileTypeClass('ebook')}">{ext}</span>
 										{/each}
 										{#each book.files.metadata ?? [] as ext}
-											<span class="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium bg-purple-950 text-purple-300 border border-purple-800">{ext}</span>
+											<span class="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium {fileTypeClass('metadata')}">{ext}</span>
 										{/each}
 										{#each book.files.images ?? [] as ext}
-											<span class="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium bg-zinc-800 text-zinc-400 border border-zinc-700">{ext}</span>
+											<span class="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium {fileTypeClass('image')}">{ext}</span>
 										{/each}
 										{#each book.files.other ?? [] as ext}
-											<span class="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium bg-zinc-800 text-zinc-500 border border-zinc-700">{ext}</span>
+											<span class="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium {fileTypeClass('other')}">{ext}</span>
 										{/each}
 									</div>
 								</td>
