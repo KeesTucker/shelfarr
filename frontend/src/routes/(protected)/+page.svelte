@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { Search, Loader2, Check } from 'lucide-svelte';
 	import { api } from '$lib/api';
-	import { formatSize, tagColorFromLabel, fileTypeClass } from '$lib/utils';
+	import { formatSize, tagColorFromLabel } from '$lib/utils';
 	import { Button } from '$lib/components/ui/button';
 	import { Badge } from '$lib/components/ui/badge';
 	import * as Dialog from '$lib/components/ui/dialog';
