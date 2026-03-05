@@ -35,7 +35,8 @@ func NewHandler(client *Client) *Handler {
 	return &Handler{client: client}
 }
 
-// Search handles GET /api/search?q=<query>. Requires JWT (enforced upstream).
+// Search handles GET /api/search?q=<query>&type=<audiobook|ebook>.
+// Requires JWT (enforced upstream).
 func (h *Handler) Search(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query().Get("q")
 	if query == "" {
@@ -43,9 +44,14 @@ func (h *Handler) Search(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	releases, err := h.client.Search(r.Context(), query)
+	mediaType := r.URL.Query().Get("type")
+	if mediaType != "ebook" {
+		mediaType = "audiobook"
+	}
+
+	releases, err := h.client.Search(r.Context(), query, mediaType)
 	if err != nil {
-		slog.Error("prowlarr search", "query", query, "err", err) //nolint:gosec
+		slog.Error("prowlarr search", "query", query, "type", mediaType, "err", err) //nolint:gosec
 		respond.Error(w, http.StatusBadGateway, "search unavailable")
 		return
 	}

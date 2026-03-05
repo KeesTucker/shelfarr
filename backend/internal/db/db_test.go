@@ -92,6 +92,15 @@ func TestRequestCRUD(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// MediaType should default to "audiobook" when omitted.
+	got0, err := d.GetRequest(ctx, "r1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got0.MediaType != db.MediaTypeAudiobook {
+		t.Errorf("default MediaType=%q, want %q", got0.MediaType, db.MediaTypeAudiobook)
+	}
+
 	// Set a torrent hash on creation via UpdateRequestStatus.
 	if err := d.UpdateRequestStatus(ctx, "r1", db.StatusDownloading,
 		db.WithTorrentHash("abc123"),
@@ -164,6 +173,65 @@ func TestRequestCRUD(t *testing.T) {
 	}
 	if len(active) != 0 {
 		t.Fatalf("expected 0 active downloads, got %d", len(active))
+	}
+}
+
+func TestRequestMediaType(t *testing.T) {
+	d := openTestDB(t)
+	ctx := context.Background()
+
+	if err := d.CreateUser(ctx, "u1", "alice", "hash", "user"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Explicit audiobook.
+	if err := d.CreateRequest(ctx, &db.Request{
+		ID: "r-audio", UserID: "u1", Title: "A", Author: "B",
+		SearchQuery: "A B", Status: db.StatusDownloading,
+		MediaType: db.MediaTypeAudiobook,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Explicit ebook.
+	if err := d.CreateRequest(ctx, &db.Request{
+		ID: "r-ebook", UserID: "u1", Title: "C", Author: "D",
+		SearchQuery: "C D", Status: db.StatusDownloading,
+		MediaType: db.MediaTypeEbook,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	audio, err := d.GetRequest(ctx, "r-audio")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if audio.MediaType != db.MediaTypeAudiobook {
+		t.Errorf("audiobook request MediaType=%q, want %q", audio.MediaType, db.MediaTypeAudiobook)
+	}
+
+	ebook, err := d.GetRequest(ctx, "r-ebook")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ebook.MediaType != db.MediaTypeEbook {
+		t.Errorf("ebook request MediaType=%q, want %q", ebook.MediaType, db.MediaTypeEbook)
+	}
+
+	// ListAllRequestsWithUser must also carry MediaType.
+	all, err := d.ListAllRequestsWithUser(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := map[string]string{}
+	for _, rw := range all {
+		found[rw.ID] = rw.MediaType
+	}
+	if found["r-audio"] != db.MediaTypeAudiobook {
+		t.Errorf("list r-audio MediaType=%q, want %q", found["r-audio"], db.MediaTypeAudiobook)
+	}
+	if found["r-ebook"] != db.MediaTypeEbook {
+		t.Errorf("list r-ebook MediaType=%q, want %q", found["r-ebook"], db.MediaTypeEbook)
 	}
 }
 

@@ -64,12 +64,18 @@ type rawRelease struct {
 	MagnetURL   string    `json:"magnetUrl"`
 }
 
-// Search queries Prowlarr for audiobook releases matching query. Results are
+// Search queries Prowlarr for releases matching query. mediaType should be
+// "audiobook" (Newznab category 3030) or "ebook" (category 7020). Results are
 // cached by GUID for 10 minutes to support the request submission flow where
 // the client sends back a GUID to fetch the download URL.
-func (c *Client) Search(ctx context.Context, query string) ([]Release, error) {
+func (c *Client) Search(ctx context.Context, query, mediaType string) ([]Release, error) {
 	if c.baseURL == "" {
 		return nil, fmt.Errorf("prowlarr: PROWLARR_URL is not configured")
+	}
+
+	category := "3030" // Audio/Audiobook
+	if mediaType == "ebook" {
+		category = "7020" // Books/Ebook
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/api/v1/search", nil)
@@ -80,7 +86,7 @@ func (c *Client) Search(ctx context.Context, query string) ([]Release, error) {
 	q := url.Values{}
 	q.Set("query", query)
 	q.Set("type", "search")
-	q.Set("categories", "3030") // 3030 = Audio/Audiobook
+	q.Set("categories", category)
 	q.Set("apikey", c.apiKey)
 	req.URL.RawQuery = q.Encode()
 

@@ -187,6 +187,39 @@ func TestRankUnabridgedNotPenalized(t *testing.T) {
 
 // ── Search handler ────────────────────────────────────────────────────────────
 
+func TestSearchHandlerTypeParam(t *testing.T) {
+	cases := []struct {
+		typeParam string
+		wantCat   string
+	}{
+		{"audiobook", "3030"},
+		{"ebook", "7020"},
+		{"", "3030"}, // defaults to audiobook
+	}
+	for _, tc := range cases {
+		var gotCat string
+		fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			gotCat = r.URL.Query().Get("categories")
+			_ = json.NewEncoder(w).Encode([]rawRelease{})
+		}))
+		h := NewHandler(New(fake.URL, "key"))
+		url := "/api/search?q=test"
+		if tc.typeParam != "" {
+			url += "&type=" + tc.typeParam
+		}
+		req := httptest.NewRequest(http.MethodGet, url, nil)
+		rr := httptest.NewRecorder()
+		h.Search(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Errorf("type=%q: got %d, want 200", tc.typeParam, rr.Code)
+		}
+		if gotCat != tc.wantCat {
+			t.Errorf("type=%q: categories=%q, want %q", tc.typeParam, gotCat, tc.wantCat)
+		}
+		fake.Close()
+	}
+}
+
 func TestSearchHandlerMissingQ(t *testing.T) {
 	h := NewHandler(New("http://fake", "key"))
 	req := httptest.NewRequest(http.MethodGet, "/api/search", nil)
@@ -273,6 +306,35 @@ func TestSearchHandlerOK(t *testing.T) {
 	}
 }
 
+// ── mediaType category routing ────────────────────────────────────────────────
+
+func TestSearchSendsCorrectCategory(t *testing.T) {
+	cases := []struct {
+		mediaType string
+		wantCat   string
+	}{
+		{"audiobook", "3030"},
+		{"ebook", "7020"},
+		{"", "3030"},      // empty defaults to audiobook
+		{"other", "3030"}, // unknown defaults to audiobook
+	}
+	for _, tc := range cases {
+		var gotCat string
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			gotCat = r.URL.Query().Get("categories")
+			_ = json.NewEncoder(w).Encode([]rawRelease{})
+		}))
+		client := New(srv.URL, "key")
+		if _, err := client.Search(context.Background(), "test", tc.mediaType); err != nil {
+			t.Fatalf("mediaType=%q Search error: %v", tc.mediaType, err)
+		}
+		if gotCat != tc.wantCat {
+			t.Errorf("mediaType=%q: categories=%q, want %q", tc.mediaType, gotCat, tc.wantCat)
+		}
+		srv.Close()
+	}
+}
+
 // ── Client cache ──────────────────────────────────────────────────────────────
 
 func TestClientGetByGUID(t *testing.T) {
@@ -283,7 +345,7 @@ func TestClientGetByGUID(t *testing.T) {
 	defer srv.Close()
 
 	client := New(srv.URL, "key")
-	if _, err := client.Search(context.Background(), "test"); err != nil {
+	if _, err := client.Search(context.Background(), "test", "audiobook"); err != nil {
 		t.Fatal(err)
 	}
 
