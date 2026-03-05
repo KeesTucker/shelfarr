@@ -168,6 +168,101 @@ func TestGetTorrentNotConfigured(t *testing.T) {
 	}
 }
 
+// ── SetCategory ───────────────────────────────────────────────────────────────
+
+func TestSetCategoryHappyPath(t *testing.T) {
+	var gotHash, gotCategory string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v2/auth/login":
+			http.SetCookie(w, &http.Cookie{Name: "SID", Value: "test-sid"})
+			fmt.Fprint(w, "Ok.")
+		case "/api/v2/torrents/setCategory":
+			if err := r.ParseForm(); err != nil {
+				http.Error(w, "bad form", http.StatusBadRequest)
+				return
+			}
+			gotHash = r.FormValue("hashes")
+			gotCategory = r.FormValue("category")
+			w.WriteHeader(http.StatusOK)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	c := New(srv.URL, "admin", "pass")
+	if err := c.SetCategory(context.Background(), "deadbeef", "imported"); err != nil {
+		t.Fatalf("SetCategory: %v", err)
+	}
+	if gotHash != "deadbeef" {
+		t.Errorf("hashes form field = %q; want %q", gotHash, "deadbeef")
+	}
+	if gotCategory != "imported" {
+		t.Errorf("category form field = %q; want %q", gotCategory, "imported")
+	}
+}
+
+func TestSetCategoryNotConfigured(t *testing.T) {
+	c := New("", "admin", "pass")
+	if err := c.SetCategory(context.Background(), "deadbeef", "imported"); err == nil {
+		t.Fatal("expected error when QBIT_URL is empty")
+	}
+}
+
+func TestSetCategoryServerError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v2/auth/login":
+			http.SetCookie(w, &http.Cookie{Name: "SID", Value: "test-sid"})
+			fmt.Fprint(w, "Ok.")
+		case "/api/v2/torrents/setCategory":
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	c := New(srv.URL, "admin", "pass")
+	if err := c.SetCategory(context.Background(), "deadbeef", "category"); err == nil {
+		t.Fatal("expected error on non-200 response")
+	}
+}
+
+func TestSetCategoryAutoCreateOnConflict(t *testing.T) {
+	var createCalled atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v2/auth/login":
+			http.SetCookie(w, &http.Cookie{Name: "SID", Value: "test-sid"})
+			fmt.Fprint(w, "Ok.")
+		case "/api/v2/torrents/setCategory":
+			if createCalled.Load() == 0 {
+				// First call: category doesn't exist yet.
+				w.WriteHeader(http.StatusConflict)
+				return
+			}
+			// Second call (after auto-create): succeed.
+			w.WriteHeader(http.StatusOK)
+		case "/api/v2/torrents/createCategory":
+			createCalled.Store(1)
+			w.WriteHeader(http.StatusOK)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	c := New(srv.URL, "admin", "pass")
+	if err := c.SetCategory(context.Background(), "deadbeef", "new-category"); err != nil {
+		t.Fatalf("SetCategory: %v", err)
+	}
+	if createCalled.Load() == 0 {
+		t.Error("expected createCategory to be called on 409")
+	}
+}
+
 // ── session re-login ──────────────────────────────────────────────────────────
 
 // TestSessionReloginOn403 verifies that when qBittorrent returns 403 (session

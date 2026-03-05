@@ -148,6 +148,86 @@ func (c *Client) GetTorrent(ctx context.Context, hash string) (*TorrentInfo, err
 	return &torrents[0], nil
 }
 
+// SetCategory changes the category of a torrent identified by its infohash.
+// Passing an empty string removes the torrent from any category.
+// If the category does not yet exist in qBittorrent (409 Conflict), it is
+// created automatically and the call is retried once.
+func (c *Client) SetCategory(ctx context.Context, hash, category string) error {
+	if c.baseURL == "" {
+		return fmt.Errorf("qbit: QBIT_URL is not configured")
+	}
+
+	makeReq := func() (*http.Request, error) {
+		form := url.Values{}
+		form.Set("hashes", hash)
+		form.Set("category", category)
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost,
+			c.baseURL+"/api/v2/torrents/setCategory",
+			strings.NewReader(form.Encode()))
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		return req, nil
+	}
+
+	resp, err := c.doWithAuth(ctx, makeReq)
+	if err != nil {
+		return fmt.Errorf("qbit set category: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode == http.StatusConflict {
+		_, _ = io.Copy(io.Discard, resp.Body)
+		// Category does not exist yet — create it and retry.
+		if err := c.createCategory(ctx, category); err != nil {
+			return fmt.Errorf("qbit set category: auto-create category: %w", err)
+		}
+		resp2, err := c.doWithAuth(ctx, makeReq)
+		if err != nil {
+			return fmt.Errorf("qbit set category (retry): %w", err)
+		}
+		defer func() { _ = resp2.Body.Close() }()
+		if resp2.StatusCode != http.StatusOK {
+			return fmt.Errorf("qbit set category (retry): unexpected status %d", resp2.StatusCode)
+		}
+		return nil
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("qbit set category: unexpected status %d", resp.StatusCode)
+	}
+	return nil
+}
+
+// createCategory creates a new category in qBittorrent with no save-path override.
+func (c *Client) createCategory(ctx context.Context, category string) error {
+	makeReq := func() (*http.Request, error) {
+		form := url.Values{}
+		form.Set("category", category)
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost,
+			c.baseURL+"/api/v2/torrents/createCategory",
+			strings.NewReader(form.Encode()))
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		return req, nil
+	}
+
+	resp, err := c.doWithAuth(ctx, makeReq)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	_, _ = io.Copy(io.Discard, resp.Body) // drain so the connection is returned to the pool
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusConflict {
+		return fmt.Errorf("unexpected status %d", resp.StatusCode)
+	}
+	return nil
+}
+
 // RemoveTorrent removes a torrent from qBittorrent by infohash without
 // deleting the downloaded files. The qBittorrent delete endpoint is
 // idempotent — passing an unknown hash returns 200.

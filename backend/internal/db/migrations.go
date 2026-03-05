@@ -15,6 +15,7 @@ type migration struct {
 // never edit existing ones once deployed.
 var migrations = []migration{
 	{version: 1, sql: schemaV1},
+	{version: 2, sql: `UPDATE requests SET status = 'importing' WHERE status = 'moving'`},
 }
 
 // migrate ensures the schema_migrations table exists, then applies any

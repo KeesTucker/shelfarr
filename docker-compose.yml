@@ -22,6 +22,7 @@ services:
       QBIT_USERNAME: ${QBIT_USERNAME}
       QBIT_PASSWORD: ${QBIT_PASSWORD}
       QBIT_CATEGORY: shelfarr
+      # QBIT_IMPORTED_CATEGORY: shelfarr-imported  # optional: set this category on the torrent after the file is imported to the library
       QBIT_AUTO_TMM: "true"
       QBIT_DELETE_ON_REQUEST_DELETE: ${QBIT_DELETE_ON_REQUEST_DELETE:-false}
 

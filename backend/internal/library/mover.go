@@ -1,5 +1,6 @@
-// Package library handles moving completed torrent files from a watch directory
-// to the audiobook library, applying Author/Title folder naming.
+// Package library handles importing completed torrent files from a watch directory
+// into the audiobook library (hardlink where possible, copy otherwise),
+// applying Author/Title folder naming.
 package library
 
 import (
@@ -19,9 +20,11 @@ import (
 
 const defaultPollInterval = 60 * time.Second
 
-// Mover moves completed torrent directories from a watch directory to the
-// library directory. It is Syncthing-aware: it polls until the source path
-// exists and contains no in-progress Syncthing temp files before moving.
+// Mover imports completed torrent files from a watch directory into the
+// library directory (hardlink where possible, copy otherwise). It is
+// Syncthing-aware: it polls until the source path exists and contains no
+// in-progress Syncthing temp files before importing. The originals are left
+// in place so qBittorrent can continue seeding.
 type Mover struct {
 	watchDir     string
 	libraryDir   string
@@ -30,7 +33,7 @@ type Mover struct {
 }
 
 // New creates a Mover. watchDir is where Syncthing (or qBit directly) delivers
-// completed files; libraryDir is the final audiobook library destination.
+// completed files; libraryDir is the audiobook library destination.
 // timeout is how long Move will wait for a file to appear before giving up.
 func New(watchDir, libraryDir string, timeout time.Duration) *Mover {
 	return &Mover{

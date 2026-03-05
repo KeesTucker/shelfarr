@@ -114,7 +114,7 @@ func run() error {
 		if err != nil {
 			return fmt.Errorf("serialise metadata: %w", err)
 		}
-		if err := database.UpdateRequestStatus(ctx, req.ID, db.StatusMoving, db.WithMetadata(metaJSON)); err != nil {
+		if err := database.UpdateRequestStatus(ctx, req.ID, db.StatusImporting, db.WithMetadata(metaJSON)); err != nil {
 			return fmt.Errorf("persist metadata: %w", err)
 		}
 		slog.Info("metadata resolved",
@@ -130,7 +130,7 @@ func run() error {
 		if err != nil {
 			return fmt.Errorf("move files: %w", err)
 		}
-		if err := database.UpdateRequestStatus(ctx, req.ID, db.StatusMoving, db.WithFinalPath(finalPath)); err != nil {
+		if err := database.UpdateRequestStatus(ctx, req.ID, db.StatusImporting, db.WithFinalPath(finalPath)); err != nil {
 			slog.Warn("persist final path", "request_id", req.ID, "err", err)
 		}
 
@@ -139,7 +139,14 @@ func run() error {
 			slog.Warn("metadata: write OPF", "request_id", req.ID, "path", finalPath, "err", err)
 		}
 
-		// 4. Discord success notification (best-effort).
+		// 4. Set the "imported" category in qBittorrent (best-effort).
+		if cfg.QBitImportedCategory != "" && info.Hash != "" {
+			if err := qbitClient.SetCategory(ctx, info.Hash, cfg.QBitImportedCategory); err != nil {
+				slog.Warn("qbit: set imported category", "request_id", req.ID, "hash", info.Hash, "err", err)
+			}
+		}
+
+		// 5. Discord success notification (best-effort).
 		if err := discord.NotifyComplete(ctx, cfg.DiscordWebhookURL, book,
 			lookupUsername(ctx, req.UserID), finalPath); err != nil {
 			slog.Warn("discord notify complete", "request_id", req.ID, "err", err)
@@ -154,12 +161,12 @@ func run() error {
 		}
 	}
 
-	// Reset requests that were left in "moving" status from a previous run.
+	// Reset requests that were left in "importing" status from a previous run.
 	// Their goroutines died with the process and cannot be resumed.
-	if n, err := database.FailStuckMovingRequests(ctx); err != nil {
-		slog.Warn("reset stuck moving requests", "err", err)
+	if n, err := database.FailStuckImportingRequests(ctx); err != nil {
+		slog.Warn("reset stuck importing requests", "err", err)
 	} else if n > 0 {
-		slog.Info("reset stuck moving requests to failed", "count", n)
+		slog.Info("reset stuck importing requests to failed", "count", n)
 	}
 
 	watcher := qbit.NewWatcher(database, qbitClient, onComplete, onFail)

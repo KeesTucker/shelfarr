@@ -4,7 +4,7 @@
 	const statusColors: Record<string, string> = {
 		pending: 'bg-zinc-800 text-zinc-300',
 		downloading: 'bg-blue-950 text-blue-300 border border-blue-800',
-		moving: 'bg-amber-950 text-amber-300 border border-amber-800',
+		importing: 'bg-amber-950 text-amber-300 border border-amber-800',
 		done: 'bg-green-950 text-green-300 border border-green-800',
 		failed: 'bg-red-950 text-red-300 border border-red-800',
 	};
