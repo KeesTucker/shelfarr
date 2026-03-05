@@ -56,27 +56,38 @@ func (h *Handler) Search(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respond.JSON(w, http.StatusOK, rank(releases))
+	respond.JSON(w, http.StatusOK, rank(releases, mediaType))
 }
 
 // ── ranking ───────────────────────────────────────────────────────────────────
 
-func rank(releases []Release) []Result {
+func rank(releases []Release, mediaType string) []Result {
 	type scored struct {
 		result Result
 		score  int
 	}
 
+	isAudiobook := mediaType == "audiobook"
+
 	items := make([]scored, 0, len(releases))
 	for _, r := range releases {
 		tags := extractTags(r.Title)
-		title, author, narrator := parseTitle(r.Title)
+
+		var title, author, narrator string
+		if isAudiobook {
+			title, author, narrator = parseTitle(r.Title)
+		} else {
+			title, author = extractByPattern(stripSuffixes(r.Title))
+		}
 
 		score := r.Seeders
-		lower := strings.ToLower(r.Title)
 		// Deprioritize abridged recordings. Guard against "unabridged" matching.
-		if strings.Contains(lower, "abridged") && !strings.Contains(lower, "unabridged") {
-			score -= 1000
+		// Only applies to audiobooks — ebook titles may legitimately contain "abridged".
+		if isAudiobook {
+			lower := strings.ToLower(r.Title)
+			if strings.Contains(lower, "abridged") && !strings.Contains(lower, "unabridged") {
+				score -= 1000
+			}
 		}
 
 		pub := ""

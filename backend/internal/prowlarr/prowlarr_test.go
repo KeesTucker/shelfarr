@@ -136,7 +136,7 @@ func TestRankSeeders(t *testing.T) {
 		{GUID: "b", Title: "Book B - Author B", Seeders: 50},
 		{GUID: "c", Title: "Book C - Author C", Seeders: 10},
 	}
-	results := rank(releases)
+	results := rank(releases, "audiobook")
 	if len(results) != 3 {
 		t.Fatalf("expected 3 results, got %d", len(results))
 	}
@@ -154,7 +154,7 @@ func TestRankAbridgedPenalty(t *testing.T) {
 		{GUID: "full", Title: "Great Book - Author", Seeders: 10},
 		{GUID: "unabridged", Title: "Great Book - Author [Unabridged]", Seeders: 5},
 	}
-	results := rank(releases)
+	results := rank(releases, "audiobook")
 
 	// "full" (10 seeders, no penalty) should beat "abridged" (100 seeders - 1000 penalty = -900).
 	// "unabridged" should not be penalised (it does not match "abridged" without "un").
@@ -179,7 +179,7 @@ func TestRankUnabridgedNotPenalized(t *testing.T) {
 		{GUID: "u", Title: "Book [Unabridged]", Seeders: 20},
 		{GUID: "a", Title: "Book (Abridged)", Seeders: 10},
 	}
-	results := rank(releases)
+	results := rank(releases, "audiobook")
 	if results[0].ID != "u" {
 		t.Errorf("unabridged with more seeders should rank first, got %q", results[0].ID)
 	}
