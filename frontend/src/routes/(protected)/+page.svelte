@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { Search, Loader2, Check } from 'lucide-svelte';
 	import { api } from '$lib/api';
-	import { formatSize } from '$lib/utils';
+	import { formatSize, tagColorFromLabel, fileTypeClass } from '$lib/utils';
 	import { Button } from '$lib/components/ui/button';
 	import { Badge } from '$lib/components/ui/badge';
 	import * as Dialog from '$lib/components/ui/dialog';
@@ -88,6 +88,7 @@
 
 	function switchType(t: 'audiobook' | 'ebook') {
 		if (t === mediaType) return;
+		if (debounceId !== null) clearTimeout(debounceId);
 		mediaType = t;
 		results = [];
 		searched = false;
@@ -267,7 +268,7 @@
 								{#if result.tags?.length}
 									<div class="flex flex-wrap gap-1 mt-1.5">
 										{#each result.tags as tag}
-											<span class="inline-block rounded px-1.5 py-0.5 text-[10px] font-mono font-medium bg-zinc-800 text-zinc-400 border border-zinc-700">{tag}</span>
+											<span class="inline-block rounded px-1.5 py-0.5 text-[10px] font-mono font-medium {tagColorFromLabel(tag)}">{tag}</span>
 										{/each}
 									</div>
 								{/if}
@@ -319,7 +320,7 @@
 					<span class="block text-[10px] uppercase tracking-widest text-zinc-500 mb-1">Format</span>
 					<div class="flex flex-wrap gap-1">
 						{#each selected.tags as tag}
-							<span class="inline-block rounded px-1.5 py-0.5 text-[10px] font-mono font-medium bg-zinc-700 text-zinc-300 border border-zinc-600">{tag}</span>
+							<span class="inline-block rounded px-1.5 py-0.5 text-[10px] font-mono font-medium {tagColorFromLabel(tag)}">{tag}</span>
 						{/each}
 					</div>
 				</div>

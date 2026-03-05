@@ -77,7 +77,20 @@ func rank(releases []Release, mediaType string) []Result {
 		if isAudiobook {
 			title, author, narrator = parseTitle(r.Title)
 		} else {
-			title, author = extractByPattern(stripSuffixes(r.Title))
+			s := stripSuffixes(r.Title)
+			parts := splitOnDash(s)
+			if len(parts) >= 2 {
+				// "Author - Title" convention
+				author = parts[0]
+				title = strings.Join(parts[1:], " - ")
+			} else {
+				// Fall back to "Title by Author"
+				title, author = extractByPattern(s)
+			}
+			title = strings.TrimSpace(stripYearSuffix(title))
+			if title == "" {
+				title = r.Title
+			}
 		}
 
 		score := r.Seeders
@@ -130,6 +143,9 @@ var knownSuffixes = []string{
 	"[audiobook]", "[audio book]", "[unabridged]", "(unabridged)",
 	"[abridged]", "(abridged)", "[m4b]", "[mp3]", "[flac]", "[aac]",
 	"[m4a]", "[ogg]", "[opus]", "[retail]", "[retail audio]",
+	// ebook format tags
+	"[epub]", "(epub)", "[pdf]", "(pdf)", "[mobi]", "(mobi)",
+	"[azw3]", "(azw3)", "[azw]", "(azw)", "[lit]", "(lit)",
 }
 
 // inlineTagRe matches bracket/paren tags that consist entirely of uppercase

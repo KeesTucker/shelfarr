@@ -20,10 +20,17 @@ var imageExts = map[string]bool{
 	".jpg": true, ".jpeg": true, ".png": true, ".webp": true, ".gif": true,
 }
 
+// ebookExts is the set of extensions treated as ebook files.
+var ebookExts = map[string]bool{
+	".epub": true, ".mobi": true, ".pdf": true,
+	".azw3": true, ".azw": true, ".lit": true,
+}
+
 // FileInfo groups the file extensions present in a book folder by category.
 // Each slice contains unique extensions without the leading dot, e.g. ["m4b"].
 type FileInfo struct {
 	Audio    []string `json:"audio"`
+	Ebook    []string `json:"ebook"`
 	Metadata []string `json:"metadata"`
 	Images   []string `json:"images"`
 	Other    []string `json:"other"`
@@ -145,6 +152,7 @@ func hasNestedDirs(dir string) bool {
 // collectFiles walks dir recursively and buckets file extensions by category.
 func collectFiles(dir string) FileInfo {
 	audio := map[string]bool{}
+	ebook := map[string]bool{}
 	meta := map[string]bool{}
 	images := map[string]bool{}
 	other := map[string]bool{}
@@ -161,6 +169,8 @@ func collectFiles(dir string) FileInfo {
 		switch {
 		case audioExts[ext]:
 			audio[extNoDot] = true
+		case ebookExts[ext]:
+			ebook[extNoDot] = true
 		case ext == ".opf":
 			meta[extNoDot] = true
 		case ext == ".json":
@@ -175,6 +185,7 @@ func collectFiles(dir string) FileInfo {
 
 	return FileInfo{
 		Audio:    mapKeys(audio),
+		Ebook:    mapKeys(ebook),
 		Metadata: mapKeys(meta),
 		Images:   mapKeys(images),
 		Other:    mapKeys(other),
