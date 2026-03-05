@@ -54,7 +54,7 @@ func TestIntegration_ClientSearch(t *testing.T) {
 	client := integrationClient(t)
 	query := searchQuery()
 
-	releases, err := client.Search(context.Background(), query)
+	releases, err := client.Search(context.Background(), query, "audiobook")
 	if err != nil {
 		t.Fatalf("Search(%q): %v", query, err)
 	}
@@ -81,7 +81,7 @@ func TestIntegration_ClientGUIDCache(t *testing.T) {
 	client := integrationClient(t)
 	query := searchQuery()
 
-	releases, err := client.Search(context.Background(), query)
+	releases, err := client.Search(context.Background(), query, "audiobook")
 	if err != nil {
 		t.Fatalf("Search: %v", err)
 	}

@@ -19,6 +19,12 @@ const (
 	StatusFailed      RequestStatus = "failed"
 )
 
+// MediaType distinguishes the kind of content being requested.
+const (
+	MediaTypeAudiobook = "audiobook"
+	MediaTypeEbook     = "ebook"
+)
+
 // Request mirrors a row in the requests table.
 type Request struct {
 	ID           string
@@ -34,6 +40,7 @@ type Request struct {
 	FinalPath    sql.NullString
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
+	MediaType    string // "audiobook" or "ebook"; defaults to "audiobook"
 }
 
 // RequestWithUser extends Request with the requesting user's username, used
@@ -49,13 +56,16 @@ type RequestWithUser struct {
 // fields (id, user, title, author, search query) are required; torrent
 // fields are populated once a torrent is selected.
 func (db *DB) CreateRequest(ctx context.Context, r *Request) error {
+	if r.MediaType == "" {
+		r.MediaType = MediaTypeAudiobook
+	}
 	_, err := db.ExecContext(ctx, `
 		INSERT INTO requests
-			(id, user_id, title, author, search_query, torrent_name, torrent_hash, status, metadata_json)
+			(id, user_id, title, author, search_query, torrent_name, torrent_hash, status, metadata_json, media_type)
 		VALUES
-			(?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		r.ID, r.UserID, r.Title, r.Author, r.SearchQuery,
-		r.TorrentName, r.TorrentHash, r.Status, r.MetadataJSON,
+		r.TorrentName, r.TorrentHash, r.Status, r.MetadataJSON, r.MediaType,
 	)
 	if err != nil {
 		return fmt.Errorf("create request: %w", err)
@@ -182,6 +192,7 @@ func (db *DB) ListAllRequestsWithUser(ctx context.Context) ([]*RequestWithUser, 
 			r.id, r.user_id, r.title, r.author, r.search_query,
 			r.torrent_name, r.torrent_hash, r.status, r.error,
 			r.metadata_json, r.final_path, r.created_at, r.updated_at,
+			r.media_type,
 			u.username
 		FROM requests r
 		JOIN users u ON r.user_id = u.id
@@ -200,6 +211,7 @@ func (db *DB) ListAllRequestsWithUser(ctx context.Context) ([]*RequestWithUser, 
 			&r.ID, &r.UserID, &r.Title, &r.Author, &r.SearchQuery,
 			&r.TorrentName, &r.TorrentHash, &r.Status, &r.Error,
 			&r.MetadataJSON, &r.FinalPath, &r.CreatedAt, &r.UpdatedAt,
+			&r.MediaType,
 			&rw.Username,
 		); err != nil {
 			return nil, fmt.Errorf("scan request row: %w", err)
@@ -285,7 +297,8 @@ const selectRequestCols = `
 	SELECT
 		r.id, r.user_id, r.title, r.author, r.search_query,
 		r.torrent_name, r.torrent_hash, r.status, r.error,
-		r.metadata_json, r.final_path, r.created_at, r.updated_at
+		r.metadata_json, r.final_path, r.created_at, r.updated_at,
+		r.media_type
 	FROM requests r`
 
 func scanRequest(row *sql.Row) (*Request, error) {
@@ -294,6 +307,7 @@ func scanRequest(row *sql.Row) (*Request, error) {
 		&r.ID, &r.UserID, &r.Title, &r.Author, &r.SearchQuery,
 		&r.TorrentName, &r.TorrentHash, &r.Status, &r.Error,
 		&r.MetadataJSON, &r.FinalPath, &r.CreatedAt, &r.UpdatedAt,
+		&r.MediaType,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
@@ -313,6 +327,7 @@ func scanRequests(rows *sql.Rows) ([]*Request, error) {
 			&r.ID, &r.UserID, &r.Title, &r.Author, &r.SearchQuery,
 			&r.TorrentName, &r.TorrentHash, &r.Status, &r.Error,
 			&r.MetadataJSON, &r.FinalPath, &r.CreatedAt, &r.UpdatedAt,
+			&r.MediaType,
 		); err != nil {
 			return nil, fmt.Errorf("scan request row: %w", err)
 		}
