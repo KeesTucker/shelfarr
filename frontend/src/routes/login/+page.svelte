@@ -33,7 +33,7 @@
 <div class="min-h-screen flex items-center justify-center bg-sepia-50 px-4 dark:bg-sepia-950">
 	<Card class="w-full max-w-sm p-8">
 		<CardHeader>
-			<img src="/logo.svg" alt="" class="w-12 h-12 mb-3 dark:invert" aria-hidden="true" />
+			<img src="/logo.svg" alt="" class="mx-auto w-12 h-12 mb-3 dark:invert" aria-hidden="true" />
 			<h1 class="text-2xl font-bold text-sepia-800 dark:text-sepia-100" style="font-family: 'Playfair Display', serif;">Shelfarr</h1>
 			<p class="mt-1 text-sm text-sepia-600 dark:text-sepia-400">Sign in with your AudioBookShelf account</p>
 			<p class="mt-0.5 text-sm text-sepia-400 dark:text-sepia-500">Made with love &amp; too much AI for Amelie</p>
