@@ -1,6 +1,7 @@
 // Package config loads all application configuration from environment variables.
-// Only JWT_SECRET is required at startup; service credentials (Prowlarr, qBit,
-// etc.) will fail at the point of use when those features are exercised.
+// Only JWT_SECRET and ABS_URL are required at startup; service credentials
+// (Prowlarr, qBit, etc.) will fail at the point of use when those features
+// are exercised.
 package config
 
 import (
@@ -12,7 +13,7 @@ import (
 // Config holds all application configuration read from environment variables.
 type Config struct {
 	// Database
-	DBPath string
+	DBPath string // DB_PATH (default: /data/shelfarr.db)
 
 	// Prowlarr
 	ProwlarrURL    string
@@ -28,13 +29,9 @@ type Config struct {
 	QBitDeleteOnRequestDelete bool // QBIT_DELETE_ON_REQUEST_DELETE
 
 	// Library
-	// WatchDir is the local path where completed files appear (either directly
-	// from qBit or delivered by Syncthing for remote seedbox setups). If empty,
-	// main resolves it from qBittorrent's configured save path at startup.
-	WatchDir   string
-	LibraryDir string
-	// WatchTimeout is the maximum time Move will poll WatchDir before giving up.
-	WatchTimeout time.Duration
+	WatchDir     string        // WATCH_DIR (default: /downloads)
+	LibraryDir   string        // LIBRARY_DIR (default: /books)
+	WatchTimeout time.Duration // WATCH_TIMEOUT (default: 24h)
 
 	// Audiobookshelf
 	ABSURL string
@@ -43,13 +40,11 @@ type Config struct {
 	DiscordWebhookURL string
 
 	// Auth
-	JWTSecret    string        `json:"-"` //nolint:gosec
-	JWTExpiry    time.Duration `json:"-"`
-	CookieSecure bool          // set false for local dev over plain HTTP
+	JWTSecret    string `json:"-"` //nolint:gosec
+	CookieSecure bool   // set false for local dev over plain HTTP
 
 	// Server
-	Port      string
-	StaticDir string // directory to serve the frontend SPA from
+	StaticDir string // STATIC_DIR (default: /app/static)
 }
 
 // Load reads configuration from the environment. Returns an error if any
@@ -63,11 +58,6 @@ func Load() (*Config, error) {
 	absURL := os.Getenv("ABS_URL")
 	if absURL == "" {
 		return nil, fmt.Errorf("ABS_URL must be set (e.g. http://audiobookshelf:13378)")
-	}
-
-	jwtExpiry, err := time.ParseDuration(getenv("JWT_EXPIRY", "24h"))
-	if err != nil {
-		return nil, fmt.Errorf("parse JWT_EXPIRY: %w", err)
 	}
 
 	watchTimeout, err := time.ParseDuration(getenv("WATCH_TIMEOUT", "24h"))
@@ -86,15 +76,13 @@ func Load() (*Config, error) {
 		QBitImportedCategory:      getenv("QBIT_IMPORTED_CATEGORY", ""),
 		QBitAutoTMM:               os.Getenv("QBIT_AUTO_TMM") == "true",
 		QBitDeleteOnRequestDelete: os.Getenv("QBIT_DELETE_ON_REQUEST_DELETE") == "true",
-		WatchDir:                  getenv("WATCH_DIR", ""),
+		WatchDir:                  getenv("WATCH_DIR", "/downloads"),
 		LibraryDir:                getenv("LIBRARY_DIR", "/books"),
 		WatchTimeout:              watchTimeout,
 		ABSURL:                    absURL,
 		DiscordWebhookURL:         getenv("DISCORD_WEBHOOK_URL", ""),
 		JWTSecret:                 jwtSecret,
-		JWTExpiry:                 jwtExpiry,
 		CookieSecure:              os.Getenv("COOKIE_INSECURE") != "true",
-		Port:                      getenv("PORT", "8008"),
 		StaticDir:                 getenv("STATIC_DIR", "/app/static"),
 	}, nil
 }

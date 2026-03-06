@@ -51,7 +51,7 @@ func run() error {
 
 	tokenCfg := auth.TokenConfig{
 		Secret:       []byte(cfg.JWTSecret),
-		Expiry:       cfg.JWTExpiry,
+		Expiry:       24 * time.Hour,
 		CookieSecure: cfg.CookieSecure,
 	}
 
@@ -60,6 +60,9 @@ func run() error {
 	prowlarrClient := prowlarr.New(cfg.ProwlarrURL, cfg.ProwlarrAPIKey)
 	qbitClient := qbit.New(cfg.QBitURL, cfg.QBitUsername, cfg.QBitPassword)
 	qbitClient.SetAutoTMM(cfg.QBitAutoTMM)
+	if !cfg.QBitAutoTMM {
+		slog.Info("qbit save path (AutoTMM disabled)", "path", cfg.WatchDir)
+	}
 
 	// ctx is cancelled on SIGINT/SIGTERM to stop background goroutines.
 	ctx, cancel := context.WithCancel(context.Background())
@@ -69,9 +72,6 @@ func run() error {
 
 	metaClient := metadata.New()
 
-	if cfg.WatchDir == "" {
-		return fmt.Errorf("WATCH_DIR must be set")
-	}
 	mover := library.New(cfg.WatchDir, cfg.LibraryDir, cfg.WatchTimeout)
 	libraryHandler := library.NewHandler(cfg.LibraryDir)
 
@@ -176,9 +176,10 @@ func run() error {
 
 	r := buildRouter(database, tokenCfg, absClient, prowlarrClient, requestsHandler, metaHandler, libraryHandler, cfg.StaticDir)
 
-	slog.Info("server listening", "port", cfg.Port)
+	const port = "8008"
+	slog.Info("server listening", "port", port)
 	srv := &http.Server{
-		Addr:         ":" + cfg.Port,
+		Addr:         ":" + port,
 		Handler:      r,
 		ReadTimeout:  30 * time.Second,
 		WriteTimeout: 30 * time.Second,
