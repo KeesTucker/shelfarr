@@ -7,7 +7,8 @@ function createTheme() {
 
 	function init() {
 		try {
-			dark = localStorage.getItem('theme') === 'dark';
+			const stored = localStorage.getItem('theme');
+			dark = stored === 'dark' || (!stored && window.matchMedia('(prefers-color-scheme: dark)').matches);
 		} catch {}
 		apply();
 	}
