@@ -35,7 +35,8 @@ func NewHandler(client *Client) *Handler {
 	return &Handler{client: client}
 }
 
-// Search handles GET /api/search?q=<query>. Requires JWT (enforced upstream).
+// Search handles GET /api/search?q=<query>&type=<audiobook|ebook>.
+// Requires JWT (enforced upstream).
 func (h *Handler) Search(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query().Get("q")
 	if query == "" {
@@ -43,34 +44,63 @@ func (h *Handler) Search(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	releases, err := h.client.Search(r.Context(), query)
+	mediaType := r.URL.Query().Get("type")
+	if mediaType != "ebook" {
+		mediaType = "audiobook"
+	}
+
+	releases, err := h.client.Search(r.Context(), query, mediaType)
 	if err != nil {
-		slog.Error("prowlarr search", "query", query, "err", err) //nolint:gosec
+		slog.Error("prowlarr search", "query", query, "type", mediaType, "err", err) //nolint:gosec
 		respond.Error(w, http.StatusBadGateway, "search unavailable")
 		return
 	}
 
-	respond.JSON(w, http.StatusOK, rank(releases))
+	respond.JSON(w, http.StatusOK, rank(releases, mediaType))
 }
 
 // ── ranking ───────────────────────────────────────────────────────────────────
 
-func rank(releases []Release) []Result {
+func rank(releases []Release, mediaType string) []Result {
 	type scored struct {
 		result Result
 		score  int
 	}
 
+	isAudiobook := mediaType == "audiobook"
+
 	items := make([]scored, 0, len(releases))
 	for _, r := range releases {
 		tags := extractTags(r.Title)
-		title, author, narrator := parseTitle(r.Title)
+
+		var title, author, narrator string
+		if isAudiobook {
+			title, author, narrator = parseTitle(r.Title)
+		} else {
+			s := stripSuffixes(r.Title)
+			parts := splitOnDash(s)
+			if len(parts) >= 2 {
+				// "Author - Title" convention
+				author = parts[0]
+				title = strings.Join(parts[1:], " - ")
+			} else {
+				// Fall back to "Title by Author"
+				title, author = extractByPattern(s)
+			}
+			title = strings.TrimSpace(stripYearSuffix(title))
+			if title == "" {
+				title = r.Title
+			}
+		}
 
 		score := r.Seeders
-		lower := strings.ToLower(r.Title)
 		// Deprioritize abridged recordings. Guard against "unabridged" matching.
-		if strings.Contains(lower, "abridged") && !strings.Contains(lower, "unabridged") {
-			score -= 1000
+		// Only applies to audiobooks — ebook titles may legitimately contain "abridged".
+		if isAudiobook {
+			lower := strings.ToLower(r.Title)
+			if strings.Contains(lower, "abridged") && !strings.Contains(lower, "unabridged") {
+				score -= 1000
+			}
 		}
 
 		pub := ""
@@ -113,6 +143,9 @@ var knownSuffixes = []string{
 	"[audiobook]", "[audio book]", "[unabridged]", "(unabridged)",
 	"[abridged]", "(abridged)", "[m4b]", "[mp3]", "[flac]", "[aac]",
 	"[m4a]", "[ogg]", "[opus]", "[retail]", "[retail audio]",
+	// ebook format tags
+	"[epub]", "(epub)", "[pdf]", "(pdf)", "[mobi]", "(mobi)",
+	"[azw3]", "(azw3)", "[azw]", "(azw)", "[lit]", "(lit)",
 }
 
 // inlineTagRe matches bracket/paren tags that consist entirely of uppercase

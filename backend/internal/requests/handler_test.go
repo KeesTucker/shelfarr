@@ -167,7 +167,7 @@ func seedProwlarrCache(t *testing.T, guid, downloadURL, torrentTitle string) *pr
 	t.Cleanup(srv.Close)
 
 	pc := prowlarr.New(srv.URL, "key")
-	if _, err := pc.Search(context.Background(), "test"); err != nil {
+	if _, err := pc.Search(context.Background(), "test", "audiobook"); err != nil {
 		t.Fatalf("seed prowlarr cache: %v", err)
 	}
 	return pc
@@ -223,6 +223,79 @@ func TestSubmitOK(t *testing.T) {
 	}
 	if resp.ID == "" {
 		t.Error("expected non-empty id")
+	}
+}
+
+func TestSubmitEbookMediaType(t *testing.T) {
+	d := openTestDB(t)
+	cfg := testTokenCfg()
+	aliceID := seedUser(t, d, "alice", "user")
+
+	pc := seedProwlarrCache(t, testGUID, testMagnet, testTorrentTitle)
+	qc := qbit.New(fakeQBitServer(t).URL, "admin", "pass")
+	h := requests.New(d, pc, qc, "/downloads")
+
+	req := authReq(t, http.MethodPost, "/api/requests",
+		fmt.Sprintf(`{"title":"My Ebook","author":"Author","torrentGuid":%q,"mediaType":"ebook"}`, testGUID),
+		cfg, aliceID, "alice", "user")
+
+	rr := httptest.NewRecorder()
+	h.Submit(rr, req)
+
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d — body: %s", rr.Code, rr.Body)
+	}
+
+	var resp struct {
+		ID        string `json:"id"`
+		MediaType string `json:"mediaType"`
+	}
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.MediaType != "ebook" {
+		t.Errorf("mediaType=%q, want %q", resp.MediaType, "ebook")
+	}
+
+	// Verify persisted to DB.
+	saved, err := d.GetRequest(context.Background(), resp.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if saved.MediaType != "ebook" {
+		t.Errorf("db MediaType=%q, want %q", saved.MediaType, "ebook")
+	}
+}
+
+func TestSubmitDefaultsToAudiobook(t *testing.T) {
+	d := openTestDB(t)
+	cfg := testTokenCfg()
+	aliceID := seedUser(t, d, "alice", "user")
+
+	pc := seedProwlarrCache(t, testGUID, testMagnet, testTorrentTitle)
+	qc := qbit.New(fakeQBitServer(t).URL, "admin", "pass")
+	h := requests.New(d, pc, qc, "/downloads")
+
+	req := authReq(t, http.MethodPost, "/api/requests",
+		fmt.Sprintf(`{"title":"Test Book","author":"Author","torrentGuid":%q}`, testGUID),
+		cfg, aliceID, "alice", "user")
+
+	rr := httptest.NewRecorder()
+	h.Submit(rr, req)
+
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d — body: %s", rr.Code, rr.Body)
+	}
+
+	var resp struct {
+		ID        string `json:"id"`
+		MediaType string `json:"mediaType"`
+	}
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.MediaType != "audiobook" {
+		t.Errorf("mediaType=%q, want %q", resp.MediaType, "audiobook")
 	}
 }
 

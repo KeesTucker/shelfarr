@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { Search, Loader2, Check } from 'lucide-svelte';
 	import { api } from '$lib/api';
-	import { formatSize } from '$lib/utils';
+	import { formatSize, tagColorFromLabel } from '$lib/utils';
 	import { Button } from '$lib/components/ui/button';
 	import { Badge } from '$lib/components/ui/badge';
 	import * as Dialog from '$lib/components/ui/dialog';
@@ -25,6 +25,7 @@
 	}
 
 	// Search state
+	let mediaType = $state<'audiobook' | 'ebook'>('audiobook');
 	let query = $state('');
 	let results = $state<SearchResult[]>([]);
 	let loading = $state(false);
@@ -76,13 +77,22 @@
 		error = '';
 		searched = true;
 		try {
-			results = await api.get<SearchResult[]>(`/api/search?q=${encodeURIComponent(q)}`);
+			results = await api.get<SearchResult[]>(`/api/search?q=${encodeURIComponent(q)}&type=${mediaType}`);
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Search failed';
 			results = [];
 		} finally {
 			loading = false;
 		}
+	}
+
+	function switchType(t: 'audiobook' | 'ebook') {
+		if (t === mediaType) return;
+		if (debounceId !== null) clearTimeout(debounceId);
+		mediaType = t;
+		results = [];
+		searched = false;
+		if (query.trim().length >= 2) doSearch(query.trim());
 	}
 
 	function openConfirm(result: SearchResult) {
@@ -139,6 +149,7 @@
 				title: selected.title,
 				author: selected.author,
 				torrentGuid: selected.id,
+				mediaType,
 				...(selectedMeta ? { metadata: selectedMeta } : {}),
 			});
 			dialogOpen = false;
@@ -165,7 +176,22 @@
 </script>
 
 <main class="mx-auto max-w-5xl px-4 py-8">
-	<h1 class="text-2xl font-bold text-zinc-100 mb-6">Find an Audiobook</h1>
+	<div class="flex items-center justify-between mb-6">
+		<h1 class="text-2xl font-bold text-zinc-100">
+			Find a{mediaType === 'ebook' ? 'n Ebook' : 'n Audiobook'}
+		</h1>
+		<!-- Type toggle -->
+		<div class="flex rounded-lg border border-zinc-700 overflow-hidden text-sm">
+			<button
+				class="px-4 py-1.5 transition-colors {mediaType === 'audiobook' ? 'bg-zinc-700 text-zinc-100' : 'bg-zinc-900 text-zinc-400 hover:text-zinc-200'}"
+				onclick={() => switchType('audiobook')}
+			>Audiobook</button>
+			<button
+				class="px-4 py-1.5 transition-colors {mediaType === 'ebook' ? 'bg-zinc-700 text-zinc-100' : 'bg-zinc-900 text-zinc-400 hover:text-zinc-200'}"
+				onclick={() => switchType('ebook')}
+			>Ebook</button>
+		</div>
+	</div>
 
 	<!-- Search input -->
 	<div class="relative mb-6">
@@ -176,7 +202,7 @@
 			type="search"
 			bind:value={query}
 			oninput={handleInput}
-			placeholder="Search by title, author, narrator…"
+			placeholder={mediaType === 'ebook' ? 'Search by title, author…' : 'Search by title, author, narrator…'}
 			class="w-full rounded-lg border border-zinc-700 bg-zinc-900 pl-10 pr-4 py-3 text-sm text-zinc-50 placeholder:text-zinc-500 focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500 transition-colors"
 		/>
 	</div>
@@ -207,10 +233,12 @@
 						<th class="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wide"
 							>Title / Author</th
 						>
+						{#if mediaType === 'audiobook'}
 						<th
 							class="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wide hidden sm:table-cell"
 							>Narrator</th
 						>
+					{/if}
 						<th
 							class="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wide hidden md:table-cell"
 							>Indexer</th
@@ -240,14 +268,16 @@
 								{#if result.tags?.length}
 									<div class="flex flex-wrap gap-1 mt-1.5">
 										{#each result.tags as tag}
-											<span class="inline-block rounded px-1.5 py-0.5 text-[10px] font-mono font-medium bg-zinc-800 text-zinc-400 border border-zinc-700">{tag}</span>
+											<span class="inline-block rounded px-1.5 py-0.5 text-[10px] font-mono font-medium {tagColorFromLabel(tag)}">{tag}</span>
 										{/each}
 									</div>
 								{/if}
 							</td>
+							{#if mediaType === 'audiobook'}
 							<td class="px-4 py-3 text-xs text-zinc-400 hidden sm:table-cell">
 								{result.narrator ?? '—'}
 							</td>
+						{/if}
 							<td class="px-4 py-3 hidden md:table-cell">
 								<Badge class="bg-zinc-800 text-zinc-300">{result.indexer}</Badge>
 							</td>
@@ -290,12 +320,12 @@
 					<span class="block text-[10px] uppercase tracking-widest text-zinc-500 mb-1">Format</span>
 					<div class="flex flex-wrap gap-1">
 						{#each selected.tags as tag}
-							<span class="inline-block rounded px-1.5 py-0.5 text-[10px] font-mono font-medium bg-zinc-700 text-zinc-300 border border-zinc-600">{tag}</span>
+							<span class="inline-block rounded px-1.5 py-0.5 text-[10px] font-mono font-medium {tagColorFromLabel(tag)}">{tag}</span>
 						{/each}
 					</div>
 				</div>
 			{/if}
-			{#if selected.narrator}
+			{#if mediaType === 'audiobook' && selected.narrator}
 					<div>
 						<span class="block text-[10px] uppercase tracking-widest text-zinc-500 mb-0.5"
 							>Narrator</span

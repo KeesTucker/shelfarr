@@ -136,7 +136,7 @@ func TestRankSeeders(t *testing.T) {
 		{GUID: "b", Title: "Book B - Author B", Seeders: 50},
 		{GUID: "c", Title: "Book C - Author C", Seeders: 10},
 	}
-	results := rank(releases)
+	results := rank(releases, "audiobook")
 	if len(results) != 3 {
 		t.Fatalf("expected 3 results, got %d", len(results))
 	}
@@ -154,7 +154,7 @@ func TestRankAbridgedPenalty(t *testing.T) {
 		{GUID: "full", Title: "Great Book - Author", Seeders: 10},
 		{GUID: "unabridged", Title: "Great Book - Author [Unabridged]", Seeders: 5},
 	}
-	results := rank(releases)
+	results := rank(releases, "audiobook")
 
 	// "full" (10 seeders, no penalty) should beat "abridged" (100 seeders - 1000 penalty = -900).
 	// "unabridged" should not be penalised (it does not match "abridged" without "un").
@@ -179,13 +179,46 @@ func TestRankUnabridgedNotPenalized(t *testing.T) {
 		{GUID: "u", Title: "Book [Unabridged]", Seeders: 20},
 		{GUID: "a", Title: "Book (Abridged)", Seeders: 10},
 	}
-	results := rank(releases)
+	results := rank(releases, "audiobook")
 	if results[0].ID != "u" {
 		t.Errorf("unabridged with more seeders should rank first, got %q", results[0].ID)
 	}
 }
 
 // ── Search handler ────────────────────────────────────────────────────────────
+
+func TestSearchHandlerTypeParam(t *testing.T) {
+	cases := []struct {
+		typeParam string
+		wantCat   string
+	}{
+		{"audiobook", "3030"},
+		{"ebook", "7020"},
+		{"", "3030"}, // defaults to audiobook
+	}
+	for _, tc := range cases {
+		var gotCat string
+		fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			gotCat = r.URL.Query().Get("categories")
+			_ = json.NewEncoder(w).Encode([]rawRelease{})
+		}))
+		h := NewHandler(New(fake.URL, "key"))
+		url := "/api/search?q=test"
+		if tc.typeParam != "" {
+			url += "&type=" + tc.typeParam
+		}
+		req := httptest.NewRequest(http.MethodGet, url, nil)
+		rr := httptest.NewRecorder()
+		h.Search(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Errorf("type=%q: got %d, want 200", tc.typeParam, rr.Code)
+		}
+		if gotCat != tc.wantCat {
+			t.Errorf("type=%q: categories=%q, want %q", tc.typeParam, gotCat, tc.wantCat)
+		}
+		fake.Close()
+	}
+}
 
 func TestSearchHandlerMissingQ(t *testing.T) {
 	h := NewHandler(New("http://fake", "key"))
@@ -273,6 +306,35 @@ func TestSearchHandlerOK(t *testing.T) {
 	}
 }
 
+// ── mediaType category routing ────────────────────────────────────────────────
+
+func TestSearchSendsCorrectCategory(t *testing.T) {
+	cases := []struct {
+		mediaType string
+		wantCat   string
+	}{
+		{"audiobook", "3030"},
+		{"ebook", "7020"},
+		{"", "3030"},      // empty defaults to audiobook
+		{"other", "3030"}, // unknown defaults to audiobook
+	}
+	for _, tc := range cases {
+		var gotCat string
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			gotCat = r.URL.Query().Get("categories")
+			_ = json.NewEncoder(w).Encode([]rawRelease{})
+		}))
+		client := New(srv.URL, "key")
+		if _, err := client.Search(context.Background(), "test", tc.mediaType); err != nil {
+			t.Fatalf("mediaType=%q Search error: %v", tc.mediaType, err)
+		}
+		if gotCat != tc.wantCat {
+			t.Errorf("mediaType=%q: categories=%q, want %q", tc.mediaType, gotCat, tc.wantCat)
+		}
+		srv.Close()
+	}
+}
+
 // ── Client cache ──────────────────────────────────────────────────────────────
 
 func TestClientGetByGUID(t *testing.T) {
@@ -283,7 +345,7 @@ func TestClientGetByGUID(t *testing.T) {
 	defer srv.Close()
 
 	client := New(srv.URL, "key")
-	if _, err := client.Search(context.Background(), "test"); err != nil {
+	if _, err := client.Search(context.Background(), "test", "audiobook"); err != nil {
 		t.Fatal(err)
 	}
 

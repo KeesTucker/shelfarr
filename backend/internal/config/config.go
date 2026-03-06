@@ -24,7 +24,7 @@ type Config struct {
 	QBitUsername              string
 	QBitPassword              string
 	QBitCategory              string
-	QBitImportedCategory      string // QBIT_IMPORTED_CATEGORY — set after file is moved to library
+	QBitImportedCategory      string // QBIT_IMPORTED_CATEGORY — set after file is imported to the library
 	QBitAutoTMM               bool
 	QBitDeleteOnRequestDelete bool // QBIT_DELETE_ON_REQUEST_DELETE
 

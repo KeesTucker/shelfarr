@@ -3,7 +3,7 @@
 	import { Loader2, FolderInput, Trash2 } from 'lucide-svelte';
 	import { api } from '$lib/api';
 	import { authStore } from '$lib/auth.svelte';
-	import { formatDate } from '$lib/utils';
+	import { formatDate, fileTypeClass } from '$lib/utils';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
@@ -15,6 +15,7 @@
 		title: string;
 		author: string;
 		status: string;
+		mediaType: string;
 		torrentName?: string;
 		error?: string;
 		finalPath?: string;
@@ -41,6 +42,7 @@
 	let selectedEntry = $state('');
 	let importTitle = $state('');
 	let importAuthor = $state('');
+	let importMediaType = $state<'audiobook' | 'ebook'>('audiobook');
 	let importing = $state(false);
 
 	// Toast state
@@ -71,6 +73,7 @@
 		selectedEntry = '';
 		importTitle = '';
 		importAuthor = '';
+		importMediaType = 'audiobook';
 		watchEntries = [];
 		watchError = '';
 		watchLoading = true;
@@ -99,6 +102,7 @@
 				torrentName: selectedEntry,
 				title: importTitle.trim(),
 				author: importAuthor.trim(),
+				mediaType: importMediaType,
 			});
 			importOpen = false;
 			showToast(`"${importTitle.trim()}" queued for import`, 'success');
@@ -159,7 +163,7 @@
 		</div>
 	{:else if requests.length === 0}
 		<div class="py-16 text-center text-sm text-zinc-500">
-			No requests yet. Head to Search to request an audiobook.
+			No requests yet. Head to Search to request an audiobook or ebook.
 		</div>
 	{:else}
 		<p class="text-xs text-zinc-500 mb-3">
@@ -196,7 +200,12 @@
 								<Badge status={req.status} />
 							</td>
 							<td class="px-4 py-3">
-								<div class="font-medium text-zinc-100 leading-snug">{req.title}</div>
+								<div class="flex items-center gap-2">
+								<span class="font-medium text-zinc-100 leading-snug">{req.title}</span>
+								{#if req.mediaType === 'ebook'}
+									<span class="inline-block rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide {fileTypeClass('ebook')}">ebook</span>
+								{/if}
+							</div>
 								<div class="text-xs text-zinc-400 mt-0.5">{req.author}</div>
 								{#if req.status === 'failed' && req.error}
 									<div class="text-xs text-red-400 mt-1">{req.error}</div>
@@ -288,6 +297,19 @@
 			</div>
 
 			<div class="space-y-4 mb-6">
+				<div class="space-y-1.5">
+					<Label>Type</Label>
+					<div class="flex rounded-lg border border-zinc-700 overflow-hidden text-sm w-fit">
+						<button
+							class="px-4 py-1.5 transition-colors {importMediaType === 'audiobook' ? 'bg-zinc-700 text-zinc-100' : 'bg-zinc-900 text-zinc-400 hover:text-zinc-200'}"
+							onclick={() => (importMediaType = 'audiobook')}
+						>Audiobook</button>
+						<button
+							class="px-4 py-1.5 transition-colors {importMediaType === 'ebook' ? 'bg-zinc-700 text-zinc-100' : 'bg-zinc-900 text-zinc-400 hover:text-zinc-200'}"
+							onclick={() => (importMediaType = 'ebook')}
+						>Ebook</button>
+					</div>
+				</div>
 				<div class="space-y-1.5">
 					<Label for="import-title">Title</Label>
 					<Input id="import-title" bind:value={importTitle} placeholder="Book title" />

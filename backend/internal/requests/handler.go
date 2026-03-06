@@ -84,6 +84,7 @@ type submitBody struct {
 	Author      string         `json:"author"`
 	TorrentGUID string         `json:"torrentGuid"`
 	Metadata    *metadata.Book `json:"metadata,omitempty"`
+	MediaType   string         `json:"mediaType,omitempty"` // "audiobook" (default) or "ebook"
 }
 
 // requestResponse is the JSON shape for a single request in API responses.
@@ -92,6 +93,7 @@ type requestResponse struct {
 	Title       string    `json:"title"`
 	Author      string    `json:"author"`
 	Status      string    `json:"status"`
+	MediaType   string    `json:"mediaType"`
 	TorrentName *string   `json:"torrentName,omitempty"`
 	TorrentHash *string   `json:"torrentHash,omitempty"`
 	Error       *string   `json:"error,omitempty"`
@@ -151,6 +153,10 @@ func (h *Handler) Submit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Persist the request record.
+	mediaType := body.MediaType
+	if mediaType != db.MediaTypeEbook {
+		mediaType = db.MediaTypeAudiobook
+	}
 	req := &db.Request{
 		ID:          uuid.NewString(),
 		UserID:      claims.UserID,
@@ -160,6 +166,7 @@ func (h *Handler) Submit(w http.ResponseWriter, r *http.Request) {
 		TorrentName: sql.NullString{String: release.Title, Valid: true},
 		TorrentHash: sql.NullString{String: hash, Valid: true},
 		Status:      db.StatusDownloading,
+		MediaType:   mediaType,
 	}
 	if body.Metadata != nil {
 		metaJSON, err := body.Metadata.JSON()
@@ -305,6 +312,7 @@ type importBody struct {
 	TorrentName string `json:"torrentName"`
 	Title       string `json:"title"`
 	Author      string `json:"author"`
+	MediaType   string `json:"mediaType,omitempty"` // "audiobook" (default) or "ebook"
 }
 
 // ListWatchDir handles GET /api/watchdir. Admin only (enforced at router).
@@ -364,6 +372,10 @@ func (h *Handler) Import(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	importMediaType := body.MediaType
+	if importMediaType != db.MediaTypeEbook {
+		importMediaType = db.MediaTypeAudiobook
+	}
 	req := &db.Request{
 		ID:          uuid.NewString(),
 		UserID:      claims.UserID,
@@ -372,6 +384,7 @@ func (h *Handler) Import(w http.ResponseWriter, r *http.Request) {
 		SearchQuery: body.Title + " " + body.Author,
 		TorrentName: sql.NullString{String: body.TorrentName, Valid: true},
 		Status:      db.StatusImporting,
+		MediaType:   importMediaType,
 	}
 	if err := h.db.CreateRequest(r.Context(), req); err != nil {
 		slog.Error("import: create request", "user_id", claims.UserID, "err", err) //nolint:gosec
@@ -414,6 +427,7 @@ func toResponse(r *db.Request) requestResponse {
 		Title:     r.Title,
 		Author:    r.Author,
 		Status:    string(r.Status),
+		MediaType: r.MediaType,
 		CreatedAt: r.CreatedAt,
 		UpdatedAt: r.UpdatedAt,
 	}

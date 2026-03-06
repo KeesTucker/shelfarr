@@ -20,10 +20,11 @@ services:
       # Auto torrent management, enabling this will ensure qbit moves the files
       # into corresponding folders based on category and status.
       QBIT_AUTO_TMM: "true"
+      QBIT_DELETE_ON_REQUEST_DELETE: "false"
       WATCH_TIMEOUT: 24h
-      ABS_URL: http://audiobookshelf:80
+      ABS_URL: ${ABS_URL:-http://audiobookshelf:80}
       DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL:-}
       JWT_SECRET: ${JWT_SECRET}
       # COOKIE_INSECURE: "true"  # uncomment only for local dev over plain HTTP (no HTTPS/Cloudflare)
-    user: "${PUID:-1000}:${PGID:-1000}"
+    user: "1000:1000"
     restart: always

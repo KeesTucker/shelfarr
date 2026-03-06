@@ -16,6 +16,7 @@ type migration struct {
 var migrations = []migration{
 	{version: 1, sql: schemaV1},
 	{version: 2, sql: `UPDATE requests SET status = 'importing' WHERE status = 'moving'`},
+	{version: 3, sql: `ALTER TABLE requests ADD COLUMN media_type TEXT NOT NULL DEFAULT 'audiobook'`},
 }
 
 // migrate ensures the schema_migrations table exists, then applies any

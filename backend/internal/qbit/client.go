@@ -173,6 +173,7 @@ func (c *Client) SetCategory(ctx context.Context, hash, category string) error {
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusConflict {
+		_, _ = io.Copy(io.Discard, resp.Body)
 		// Category does not exist yet — create it and retry.
 		if err := c.createCategory(ctx, category); err != nil {
 			return fmt.Errorf("qbit set category: auto-create category: %w", err)
@@ -182,6 +183,7 @@ func (c *Client) SetCategory(ctx context.Context, hash, category string) error {
 			return fmt.Errorf("qbit set category (retry): %w", err)
 		}
 		defer func() { _ = resp2.Body.Close() }()
+		_, _ = io.Copy(io.Discard, resp2.Body) // drain so the connection is returned to the pool
 		if resp2.StatusCode != http.StatusOK {
 			return fmt.Errorf("qbit set category (retry): unexpected status %d", resp2.StatusCode)
 		}
@@ -215,6 +217,7 @@ func (c *Client) createCategory(ctx context.Context, category string) error {
 	}
 	defer func() { _ = resp.Body.Close() }()
 
+	_, _ = io.Copy(io.Discard, resp.Body) // drain so the connection is returned to the pool
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusConflict {
 		return fmt.Errorf("unexpected status %d", resp.StatusCode)
 	}
