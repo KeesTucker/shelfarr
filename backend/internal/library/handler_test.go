@@ -10,11 +10,12 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestHandlerList_EmptyLibrary(t *testing.T) {
 	h := NewHandler(t.TempDir())
-	req := httptest.NewRequest(http.MethodGet, "/api/library", nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/library", nil)
 	rr := httptest.NewRecorder()
 	h.List(rr, req)
 
@@ -36,7 +37,7 @@ func TestHandlerList_WithBooks(t *testing.T) {
 		t.Fatal(err)
 	}
 	h := NewHandler(libDir)
-	req := httptest.NewRequest(http.MethodGet, "/api/library", nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/library", nil)
 	rr := httptest.NewRecorder()
 	h.List(rr, req)
 
@@ -60,7 +61,7 @@ func TestHandlerList_WithBooks(t *testing.T) {
 
 func TestHandlerList_ScanError(t *testing.T) {
 	h := NewHandler(filepath.Join(t.TempDir(), "no-such-dir"))
-	req := httptest.NewRequest(http.MethodGet, "/api/library", nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/library", nil)
 	rr := httptest.NewRecorder()
 	h.List(rr, req)
 
@@ -77,7 +78,7 @@ func TestHandlerCleanup_All(t *testing.T) {
 		t.Fatal(err)
 	}
 	h := NewHandler(libDir)
-	req := httptest.NewRequest(http.MethodPost, "/api/library/cleanup", nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/library/cleanup", nil)
 	rr := httptest.NewRecorder()
 	h.Cleanup(rr, req)
 
@@ -99,7 +100,7 @@ func TestHandlerCleanup_AllNothingToClean(t *testing.T) {
 		t.Fatal(err)
 	}
 	h := NewHandler(libDir)
-	req := httptest.NewRequest(http.MethodPost, "/api/library/cleanup", nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/library/cleanup", nil)
 	rr := httptest.NewRecorder()
 	h.Cleanup(rr, req)
 
@@ -125,7 +126,7 @@ func TestHandlerCleanup_SingleFound(t *testing.T) {
 	h := NewHandler(libDir)
 	// Request body must use the exact TitleFolder value that cleanupSingle matches against.
 	body := `{"author":"Brandon Sanderson","title":"Mistborn  The Final Empire"}`
-	req := httptest.NewRequest(http.MethodPost, "/api/library/cleanup", strings.NewReader(body))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/library/cleanup", strings.NewReader(body))
 	req.ContentLength = int64(len(body))
 	rr := httptest.NewRecorder()
 	h.Cleanup(rr, req)
@@ -145,7 +146,7 @@ func TestHandlerCleanup_SingleFound(t *testing.T) {
 func TestHandlerCleanup_SingleNotFound(t *testing.T) {
 	h := NewHandler(t.TempDir())
 	body := `{"author":"Nobody","title":"Nonexistent"}`
-	req := httptest.NewRequest(http.MethodPost, "/api/library/cleanup", strings.NewReader(body))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/library/cleanup", strings.NewReader(body))
 	req.ContentLength = int64(len(body))
 	rr := httptest.NewRecorder()
 	h.Cleanup(rr, req)
@@ -158,7 +159,7 @@ func TestHandlerCleanup_SingleNotFound(t *testing.T) {
 func TestHandlerCleanup_MalformedJSON(t *testing.T) {
 	h := NewHandler(t.TempDir())
 	body := `{not valid json`
-	req := httptest.NewRequest(http.MethodPost, "/api/library/cleanup", strings.NewReader(body))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/library/cleanup", strings.NewReader(body))
 	req.ContentLength = int64(len(body))
 	rr := httptest.NewRecorder()
 	h.Cleanup(rr, req)
@@ -171,7 +172,7 @@ func TestHandlerCleanup_MalformedJSON(t *testing.T) {
 func TestHandlerCleanup_SingleScanError(t *testing.T) {
 	h := NewHandler(filepath.Join(t.TempDir(), "no-such-dir"))
 	body := `{"author":"Author","title":"Title"}`
-	req := httptest.NewRequest(http.MethodPost, "/api/library/cleanup", strings.NewReader(body))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/library/cleanup", strings.NewReader(body))
 	req.ContentLength = int64(len(body))
 	rr := httptest.NewRecorder()
 	h.Cleanup(rr, req)
@@ -219,14 +220,19 @@ func TestHandlerCleanup_SingleTriggersABSMergeForMultiPartBook(t *testing.T) {
 		}
 	}
 
+	merged := make(chan string, 1)
 	mock := &mockABSClient{
 		findItemFn: func(_ context.Context, _, _, _ string) (string, error) { return "li_abc", nil },
+		mergePartFn: func(_ context.Context, _, itemID string) error {
+			merged <- itemID
+			return nil
+		},
 	}
 	h := NewHandler(libDir)
 	h.SetABSClient(mock, "test-key")
 
 	body := `{"author":"Author","title":"Book"}`
-	req := httptest.NewRequest(http.MethodPost, "/api/library/cleanup", strings.NewReader(body))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/library/cleanup", strings.NewReader(body))
 	req.ContentLength = int64(len(body))
 	rr := httptest.NewRecorder()
 	h.Cleanup(rr, req)
@@ -238,11 +244,17 @@ func TestHandlerCleanup_SingleTriggersABSMergeForMultiPartBook(t *testing.T) {
 	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
 		t.Fatal(err)
 	}
-	if resp.Merged != 1 {
-		t.Errorf("Merged=%d; want 1", resp.Merged)
+	if resp.Cleaned != 1 {
+		t.Errorf("Cleaned=%d; want 1", resp.Cleaned)
 	}
-	if len(mock.mergeCalls) != 1 || mock.mergeCalls[0] != "li_abc" {
-		t.Errorf("MergeMultiPart calls: %v; want [li_abc]", mock.mergeCalls)
+	// ABS merge is async; wait for it with a timeout.
+	select {
+	case itemID := <-merged:
+		if itemID != "li_abc" {
+			t.Errorf("MergeMultiPart called with %q; want li_abc", itemID)
+		}
+	case <-time.After(2 * time.Second):
+		t.Error("timed out waiting for async ABS merge")
 	}
 }
 
@@ -261,7 +273,7 @@ func TestHandlerCleanup_SingleNoABSMergeForSingleAudioFile(t *testing.T) {
 	h.SetABSClient(mock, "test-key")
 
 	body := `{"author":"Author","title":"Book"}`
-	req := httptest.NewRequest(http.MethodPost, "/api/library/cleanup", strings.NewReader(body))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/library/cleanup", strings.NewReader(body))
 	req.ContentLength = int64(len(body))
 	rr := httptest.NewRecorder()
 	h.Cleanup(rr, req)
@@ -274,7 +286,7 @@ func TestHandlerCleanup_SingleNoABSMergeForSingleAudioFile(t *testing.T) {
 	}
 }
 
-func TestHandlerCleanup_SingleABSMergeErrorIncludedInResponse(t *testing.T) {
+func TestHandlerCleanup_SingleABSMergeErrorIsLogged(t *testing.T) {
 	libDir := t.TempDir()
 	titlePath := filepath.Join(libDir, "Author", "Book")
 	if err := os.MkdirAll(titlePath, 0o755); err != nil {
@@ -286,8 +298,10 @@ func TestHandlerCleanup_SingleABSMergeErrorIncludedInResponse(t *testing.T) {
 		}
 	}
 
+	done := make(chan struct{}, 1)
 	mock := &mockABSClient{
 		findItemFn: func(_ context.Context, _, _, _ string) (string, error) {
+			done <- struct{}{}
 			return "", errors.New("ABS unreachable")
 		},
 	}
@@ -295,12 +309,12 @@ func TestHandlerCleanup_SingleABSMergeErrorIncludedInResponse(t *testing.T) {
 	h.SetABSClient(mock, "test-key")
 
 	body := `{"author":"Author","title":"Book"}`
-	req := httptest.NewRequest(http.MethodPost, "/api/library/cleanup", strings.NewReader(body))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/library/cleanup", strings.NewReader(body))
 	req.ContentLength = int64(len(body))
 	rr := httptest.NewRecorder()
 	h.Cleanup(rr, req)
 
-	// Cleanup itself succeeds; ABS error is non-fatal.
+	// Cleanup succeeds immediately; ABS error is async and only logged.
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
 	}
@@ -308,19 +322,26 @@ func TestHandlerCleanup_SingleABSMergeErrorIncludedInResponse(t *testing.T) {
 	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
 		t.Fatal(err)
 	}
-	if resp.Merged != 0 {
-		t.Errorf("Merged=%d; want 0 on ABS error", resp.Merged)
+	if resp.Cleaned != 1 {
+		t.Errorf("Cleaned=%d; want 1", resp.Cleaned)
 	}
-	if len(resp.Errors) == 0 {
-		t.Error("expected ABS error in response Errors slice")
+	if len(resp.Errors) != 0 {
+		t.Errorf("unexpected response errors: %v", resp.Errors)
+	}
+	// Wait for the async goroutine to call FindLibraryItemByTitleAuthor.
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Error("timed out waiting for async ABS merge attempt")
 	}
 }
 
 func TestHandlerCleanup_AllTriggersABSMergeOnlyForMultiPartBooks(t *testing.T) {
 	libDir := t.TempDir()
 
-	// Multi-part book.
-	multiPath := filepath.Join(libDir, "Author A", "Multi Book")
+	// Multi-part book with a dirty name (double space) so NeedsRename=true,
+	// which is required for the all-path merge filter to fire.
+	multiPath := filepath.Join(libDir, "Author A", "Multi  Book")
 	if err := os.MkdirAll(multiPath, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -330,7 +351,7 @@ func TestHandlerCleanup_AllTriggersABSMergeOnlyForMultiPartBooks(t *testing.T) {
 		}
 	}
 
-	// Single-part book.
+	// Single-part book (clean name, should never trigger merge).
 	singlePath := filepath.Join(libDir, "Author B", "Single Book")
 	if err := os.MkdirAll(singlePath, 0o755); err != nil {
 		t.Fatal(err)
@@ -339,13 +360,17 @@ func TestHandlerCleanup_AllTriggersABSMergeOnlyForMultiPartBooks(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// done is closed by the mock when MergeMultiPart is called, allowing the
+	// test to synchronise with the background goroutine.
+	done := make(chan struct{})
 	mock := &mockABSClient{
-		findItemFn: func(_ context.Context, _, _, _ string) (string, error) { return "li_multi", nil },
+		findItemFn:  func(_ context.Context, _, _, _ string) (string, error) { return "li_multi", nil },
+		mergePartFn: func(_ context.Context, _, _ string) error { close(done); return nil },
 	}
 	h := NewHandler(libDir)
 	h.SetABSClient(mock, "test-key")
 
-	req := httptest.NewRequest(http.MethodPost, "/api/library/cleanup", nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/library/cleanup", nil)
 	rr := httptest.NewRecorder()
 	h.Cleanup(rr, req)
 
@@ -356,11 +381,90 @@ func TestHandlerCleanup_AllTriggersABSMergeOnlyForMultiPartBooks(t *testing.T) {
 	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
 		t.Fatal(err)
 	}
-	if resp.Merged != 1 {
-		t.Errorf("Merged=%d; want 1 (only multi-part book)", resp.Merged)
+	if resp.Cleaned != 1 {
+		t.Errorf("Cleaned=%d; want 1", resp.Cleaned)
+	}
+
+	// Wait for the background merge goroutine.
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for background ABS merge")
 	}
 	if len(mock.mergeCalls) != 1 {
 		t.Errorf("merge calls: %v; want exactly 1", mock.mergeCalls)
+	}
+}
+
+func TestHandlerCleanup_SingleNoABSMergeWhenClientNotConfigured(t *testing.T) {
+	libDir := t.TempDir()
+	titlePath := filepath.Join(libDir, "Author", "Book")
+	if err := os.MkdirAll(titlePath, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, n := range []string{"p1.mp3", "p2.mp3"} {
+		if err := os.WriteFile(filepath.Join(titlePath, n), []byte("a"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// No SetABSClient — ABS not configured; single-book cleanup should still succeed.
+	h := NewHandler(libDir)
+	body := `{"author":"Author","title":"Book"}`
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/library/cleanup", strings.NewReader(body))
+	req.ContentLength = int64(len(body))
+	rr := httptest.NewRecorder()
+	h.Cleanup(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	var resp cleanupResponse
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.Cleaned != 1 {
+		t.Errorf("Cleaned=%d; want 1", resp.Cleaned)
+	}
+}
+
+func TestHandlerCleanup_AllRescanErrorReportedInErrors(t *testing.T) {
+	// Point the handler at a directory that will disappear before the rescan.
+	libDir := t.TempDir()
+	titlePath := filepath.Join(libDir, "Author", "Book")
+	if err := os.MkdirAll(titlePath, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, n := range []string{"p1.mp3", "p2.mp3"} {
+		if err := os.WriteFile(filepath.Join(titlePath, n), []byte("a"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	mock := &mockABSClient{
+		findItemFn: func(_ context.Context, _, _, _ string) (string, error) { return "li_x", nil },
+	}
+	h := NewHandler(libDir)
+	h.SetABSClient(mock, "test-key")
+
+	// Remove the library directory so the ScanLibrary call inside CleanupAll fails.
+	if err := os.RemoveAll(libDir); err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/library/cleanup", nil)
+	rr := httptest.NewRecorder()
+	h.Cleanup(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	var resp cleanupResponse
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.Errors) == 0 {
+		t.Error("expected rescan error in response Errors slice")
 	}
 }
 
@@ -378,7 +482,7 @@ func TestHandlerCleanup_NoABSMergeWhenClientNotConfigured(t *testing.T) {
 
 	// No SetABSClient — ABS not configured.
 	h := NewHandler(libDir)
-	req := httptest.NewRequest(http.MethodPost, "/api/library/cleanup", nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/library/cleanup", nil)
 	rr := httptest.NewRecorder()
 	h.Cleanup(rr, req)
 
@@ -389,8 +493,8 @@ func TestHandlerCleanup_NoABSMergeWhenClientNotConfigured(t *testing.T) {
 	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
 		t.Fatal(err)
 	}
-	if resp.Merged != 0 {
-		t.Errorf("Merged=%d; want 0 when ABS not configured", resp.Merged)
+	if resp.Cleaned != 0 {
+		t.Errorf("Cleaned=%d; want 0 (multi-part book had clean name)", resp.Cleaned)
 	}
 }
 
@@ -409,7 +513,7 @@ func TestHandlerPrune_RemovesEmpty(t *testing.T) {
 	}
 
 	h := NewHandler(libDir)
-	req := httptest.NewRequest(http.MethodPost, "/api/library/prune", nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/library/prune", nil)
 	rr := httptest.NewRecorder()
 	h.Prune(rr, req)
 
@@ -447,7 +551,7 @@ func TestHandlerPrune_NothingToRemove(t *testing.T) {
 	}
 
 	h := NewHandler(libDir)
-	req := httptest.NewRequest(http.MethodPost, "/api/library/prune", nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/library/prune", nil)
 	rr := httptest.NewRecorder()
 	h.Prune(rr, req)
 
@@ -467,7 +571,7 @@ func TestHandlerPrune_NothingToRemove(t *testing.T) {
 
 func TestHandlerPrune_NonExistentLibrary(t *testing.T) {
 	h := NewHandler(filepath.Join(t.TempDir(), "no-such-dir"))
-	req := httptest.NewRequest(http.MethodPost, "/api/library/prune", nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/library/prune", nil)
 	rr := httptest.NewRecorder()
 	h.Prune(rr, req)
 

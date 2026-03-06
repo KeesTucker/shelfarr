@@ -36,6 +36,8 @@ type absLibraryItem struct {
 
 type absLibraryItemsResponse struct {
 	Results []absLibraryItem `json:"results"`
+	Total   int              `json:"total"`
+	Limit   int              `json:"limit"`
 }
 
 // FindLibraryItemByTitleAuthor searches all ABS book libraries for an item
@@ -79,37 +81,48 @@ func (c *Client) FindLibraryItemByTitleAuthor(ctx context.Context, apiKey, title
 	return "", nil
 }
 
-// searchLibraryItems searches a single ABS library by title and matches the
-// result against the expected author. Returns the item ID or "".
+// searchLibraryItems searches a single ABS library by title, paginating until
+// the item is found or all pages are exhausted. Returns the item ID or "".
 func (c *Client) searchLibraryItems(ctx context.Context, apiKey, libraryID, title, author string) (string, error) {
-	searchURL := c.baseURL + "/api/libraries/" + libraryID + "/items?search=" + url.QueryEscape(title)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, searchURL, nil)
-	if err != nil {
-		return "", fmt.Errorf("build search request: %w", err)
-	}
-	req.Header.Set("Authorization", "Bearer "+apiKey)
-
-	resp, err := c.httpClient.Do(req) //nolint:gosec
-	if err != nil {
-		return "", fmt.Errorf("search items: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("search items: unexpected status %d", resp.StatusCode)
-	}
-
-	var itemsResp absLibraryItemsResponse
-	if err := json.NewDecoder(resp.Body).Decode(&itemsResp); err != nil {
-		return "", fmt.Errorf("decode items: %w", err)
-	}
-
 	titleLower := strings.ToLower(title)
 	authorLower := strings.ToLower(author)
-	for _, item := range itemsResp.Results {
-		if strings.ToLower(item.Media.Metadata.Title) == titleLower &&
-			strings.ToLower(item.Media.Metadata.AuthorName) == authorLower {
-			return item.ID, nil
+	search := url.QueryEscape(title)
+
+	for page := 0; ; page++ {
+		searchURL := fmt.Sprintf("%s/api/libraries/%s/items?search=%s&page=%d",
+			c.baseURL, url.PathEscape(libraryID), search, page)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, searchURL, nil)
+		if err != nil {
+			return "", fmt.Errorf("build search request: %w", err)
+		}
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+
+		resp, err := c.httpClient.Do(req) //nolint:gosec
+		if err != nil {
+			return "", fmt.Errorf("search items page %d: %w", page, err)
+		}
+		if resp.StatusCode != http.StatusOK {
+			_ = resp.Body.Close()
+			return "", fmt.Errorf("search items page %d: unexpected status %d", page, resp.StatusCode)
+		}
+		var itemsResp absLibraryItemsResponse
+		if err := json.NewDecoder(resp.Body).Decode(&itemsResp); err != nil {
+			_ = resp.Body.Close()
+			return "", fmt.Errorf("decode items page %d: %w", page, err)
+		}
+		_ = resp.Body.Close()
+
+		for _, item := range itemsResp.Results {
+			if strings.ToLower(item.Media.Metadata.Title) == titleLower &&
+				strings.ToLower(item.Media.Metadata.AuthorName) == authorLower {
+				return item.ID, nil
+			}
+		}
+
+		// Stop when this is the last page: no results, or we've seen all items.
+		if len(itemsResp.Results) == 0 || itemsResp.Limit <= 0 ||
+			(page+1)*itemsResp.Limit >= itemsResp.Total {
+			break
 		}
 	}
 	return "", nil
@@ -119,7 +132,7 @@ func (c *Client) searchLibraryItems(ctx context.Context, apiKey, libraryID, titl
 // ID. ABS processes the merge asynchronously; this returns once the job is queued.
 func (c *Client) MergeMultiPart(ctx context.Context, apiKey, itemID string) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
-		c.baseURL+"/api/tools/item/"+itemID+"/merge-multipart", nil)
+		c.baseURL+"/api/tools/item/"+url.PathEscape(itemID)+"/merge-multipart", nil)
 	if err != nil {
 		return fmt.Errorf("abs: build merge request: %w", err)
 	}

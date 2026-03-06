@@ -59,7 +59,7 @@ type absLoginResponse struct {
 // Returns ErrInvalidCredentials if ABS rejects the credentials (401/403).
 // Any other non-200 response is returned as a generic error.
 func (c *Client) Login(ctx context.Context, username, password string) (*User, error) {
-	payload, err := json.Marshal(absLoginRequest{Username: username, Password: password})
+	payload, err := json.Marshal(absLoginRequest{Username: username, Password: password}) //nolint:gosec // intentional: marshalling credentials for ABS login
 	if err != nil {
 		return nil, fmt.Errorf("marshal abs login request: %w", err)
 	}

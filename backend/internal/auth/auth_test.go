@@ -150,7 +150,7 @@ func TestAuthenticateMiddleware(t *testing.T) {
 	t.Run("valid token", func(t *testing.T) {
 		reached = false
 		tokenStr, _ := auth.NewToken(cfg, "u42", "bob", "user")
-		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
 		req.AddCookie(&http.Cookie{Name: auth.AuthCookieName, Value: tokenStr})
 
 		rr := httptest.NewRecorder()
@@ -165,7 +165,7 @@ func TestAuthenticateMiddleware(t *testing.T) {
 	})
 
 	t.Run("missing cookie", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
 		rr := httptest.NewRecorder()
 		handler.ServeHTTP(rr, req)
 		if rr.Code != http.StatusUnauthorized {
@@ -174,7 +174,7 @@ func TestAuthenticateMiddleware(t *testing.T) {
 	})
 
 	t.Run("malformed token", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
 		req.AddCookie(&http.Cookie{Name: auth.AuthCookieName, Value: "not.a.token"})
 		rr := httptest.NewRecorder()
 		handler.ServeHTTP(rr, req)
@@ -193,7 +193,7 @@ func TestRequireAdmin(t *testing.T) {
 
 	makeReq := func(role string) *http.Request {
 		tokenStr, _ := auth.NewToken(cfg, "u1", "alice", role)
-		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
 		req.AddCookie(&http.Cookie{Name: auth.AuthCookieName, Value: tokenStr})
 		return req
 	}
@@ -219,7 +219,7 @@ func TestLoginLocalOK(t *testing.T) {
 
 	h := auth.NewHandler(d, testTokenCfg(), nil) // nil = local auth
 	body := `{"username":"alice","password":"password123"}`
-	req := httptest.NewRequest(http.MethodPost, "/api/auth/login", strings.NewReader(body))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/auth/login", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
 	h.Login(rr, req)
@@ -246,7 +246,7 @@ func TestLoginLocalWrongPassword(t *testing.T) {
 
 	h := auth.NewHandler(d, testTokenCfg(), nil)
 	body := `{"username":"alice","password":"wrong"}`
-	req := httptest.NewRequest(http.MethodPost, "/api/auth/login", strings.NewReader(body))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/auth/login", strings.NewReader(body))
 	rr := httptest.NewRecorder()
 	h.Login(rr, req)
 
@@ -260,7 +260,7 @@ func TestLoginLocalUnknownUser(t *testing.T) {
 	h := auth.NewHandler(d, testTokenCfg(), nil)
 
 	body := `{"username":"ghost","password":"pw"}`
-	req := httptest.NewRequest(http.MethodPost, "/api/auth/login", strings.NewReader(body))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/auth/login", strings.NewReader(body))
 	rr := httptest.NewRecorder()
 	h.Login(rr, req)
 
@@ -278,7 +278,7 @@ func TestLoginMissingFields(t *testing.T) {
 		`{"password":"pw"}`,
 		`{}`,
 	} {
-		req := httptest.NewRequest(http.MethodPost, "/api/auth/login", strings.NewReader(body))
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/auth/login", strings.NewReader(body))
 		rr := httptest.NewRecorder()
 		h.Login(rr, req)
 		if rr.Code != http.StatusBadRequest {
@@ -291,7 +291,7 @@ func TestLoginBadJSON(t *testing.T) {
 	d := openTestDB(t)
 	h := auth.NewHandler(d, testTokenCfg(), nil)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/auth/login", strings.NewReader("not json"))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/auth/login", strings.NewReader("not json"))
 	rr := httptest.NewRecorder()
 	h.Login(rr, req)
 
@@ -308,7 +308,7 @@ func TestLoginABSOK(t *testing.T) {
 	h := auth.NewHandler(d, testTokenCfg(), stub)
 
 	body := `{"username":"alice","password":"anypassword"}`
-	req := httptest.NewRequest(http.MethodPost, "/api/auth/login", strings.NewReader(body))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/auth/login", strings.NewReader(body))
 	rr := httptest.NewRecorder()
 	h.Login(rr, req)
 
@@ -334,7 +334,7 @@ func TestLoginABSInvalidCredentials(t *testing.T) {
 	h := auth.NewHandler(d, testTokenCfg(), stub)
 
 	body := `{"username":"alice","password":"wrong"}`
-	req := httptest.NewRequest(http.MethodPost, "/api/auth/login", strings.NewReader(body))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/auth/login", strings.NewReader(body))
 	rr := httptest.NewRecorder()
 	h.Login(rr, req)
 
@@ -349,7 +349,7 @@ func TestLoginABSUpsertsPersistsUser(t *testing.T) {
 	h := auth.NewHandler(d, testTokenCfg(), stub)
 
 	body := `{"username":"bob","password":"pw"}`
-	req := httptest.NewRequest(http.MethodPost, "/api/auth/login", strings.NewReader(body))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/auth/login", strings.NewReader(body))
 	rr := httptest.NewRecorder()
 	h.Login(rr, req)
 
@@ -380,7 +380,7 @@ func TestMe(t *testing.T) {
 	}
 
 	h := auth.NewHandler(d, cfg, nil)
-	req := httptest.NewRequest(http.MethodGet, "/api/auth/me", nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/auth/me", nil)
 	req.AddCookie(&http.Cookie{Name: auth.AuthCookieName, Value: tokenStr})
 
 	rr := httptest.NewRecorder()

@@ -159,6 +159,77 @@ func TestFindLibraryItemByTitleAuthor_SearchesMultipleLibraries(t *testing.T) {
 	}
 }
 
+func TestFindLibraryItemByTitleAuthor_PaginatesUntilFound(t *testing.T) {
+	page0 := itemsResponse(bookItem("li_wrong", "Other Book", "Other Author"))
+	// Patch total/limit so the client knows there is a second page.
+	type paged struct {
+		Results []map[string]any `json:"results"`
+		Total   int              `json:"total"`
+		Limit   int              `json:"limit"`
+	}
+	encPage := func(items []map[string]any, total, limit int) []byte {
+		b, _ := json.Marshal(paged{Results: items, Total: total, Limit: limit})
+		return b
+	}
+
+	calls := 0
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/libraries", func(w http.ResponseWriter, _ *http.Request) {
+		w.Write(librariesResponse(map[string]any{"id": "lib1", "mediaType": "book"}))
+	})
+	mux.HandleFunc("GET /api/libraries/lib1/items", func(w http.ResponseWriter, r *http.Request) {
+		_ = page0 // suppress unused warning
+		calls++
+		switch r.URL.Query().Get("page") {
+		case "", "0":
+			// Page 0: one non-matching item, total=2 limit=1 → signals a second page.
+			w.Write(encPage([]map[string]any{{"id": "li_wrong", "media": map[string]any{"metadata": map[string]any{"title": "Other Book", "authorName": "Other Author"}}}}, 2, 1))
+		default:
+			// Page 1: the item we want.
+			w.Write(encPage([]map[string]any{{"id": "li_target", "media": map[string]any{"metadata": map[string]any{"title": "Dune", "authorName": "Frank Herbert"}}}}, 2, 1))
+		}
+	})
+
+	client := abs.New(fakeLibraryServer(t, mux).URL)
+
+	itemID, err := client.FindLibraryItemByTitleAuthor(context.Background(), "key", "Dune", "Frank Herbert")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if itemID != "li_target" {
+		t.Errorf("itemID: want li_target, got %q", itemID)
+	}
+	if calls < 2 {
+		t.Errorf("expected at least 2 page requests, got %d", calls)
+	}
+}
+
+func TestFindLibraryItemByTitleAuthor_StopsWhenResultsExhausted(t *testing.T) {
+	calls := 0
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/libraries", func(w http.ResponseWriter, _ *http.Request) {
+		w.Write(librariesResponse(map[string]any{"id": "lib1", "mediaType": "book"}))
+	})
+	mux.HandleFunc("GET /api/libraries/lib1/items", func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		// Always return empty results — should stop after first call.
+		w.Write(itemsResponse())
+	})
+
+	client := abs.New(fakeLibraryServer(t, mux).URL)
+
+	itemID, err := client.FindLibraryItemByTitleAuthor(context.Background(), "key", "Dune", "Frank Herbert")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if itemID != "" {
+		t.Errorf("expected empty itemID; got %q", itemID)
+	}
+	if calls != 1 {
+		t.Errorf("expected exactly 1 page request when results empty, got %d", calls)
+	}
+}
+
 func TestFindLibraryItemByTitleAuthor_LibrariesHTTPError(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/libraries", func(w http.ResponseWriter, _ *http.Request) {

@@ -58,7 +58,6 @@ type cleanupRequest struct {
 
 type cleanupResponse struct {
 	Cleaned int      `json:"cleaned"`
-	Merged  int      `json:"merged"`
 	Errors  []string `json:"errors"`
 }
 
@@ -77,9 +76,12 @@ func (h *Handler) Cleanup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cleaned, errs := CleanupAll(h.libraryDir)
-	merged := h.mergeAllMultiPart(r.Context(), &errs)
-	respond.JSON(w, http.StatusOK, cleanupResponse{Cleaned: cleaned, Merged: merged, Errors: errs})
+	entries, cleaned, errs := CleanupAll(h.libraryDir)
+	if h.absClient != nil && h.absAPIKey != "" {
+		ctx := context.WithoutCancel(r.Context())
+		go h.mergeMultiPartEntries(ctx, entries)
+	}
+	respond.JSON(w, http.StatusOK, cleanupResponse{Cleaned: cleaned, Errors: errs})
 }
 
 // Prune handles POST /api/library/prune. Removes empty directories from the
@@ -109,53 +111,46 @@ func (h *Handler) cleanupSingle(w http.ResponseWriter, r *http.Request, author, 
 				respond.Error(w, http.StatusInternalServerError, err.Error())
 				return
 			}
-			merged := 0
-			var mergeErrs []string
-			if e.IsMultiPart {
-				if err := h.triggerABSMerge(r.Context(), e.Metadata.Title, e.Metadata.Author); err != nil {
-					slog.Warn("library: ABS merge", "author", e.AuthorFolder, "title", e.TitleFolder, "err", err)
-					mergeErrs = append(mergeErrs, "ABS merge: "+err.Error())
-				} else {
-					merged = 1
-				}
+			if e.IsMultiPart && h.absClient != nil && h.absAPIKey != "" {
+				ctx := context.WithoutCancel(r.Context())
+				go h.mergeMultiPartEntries(ctx, []BookEntry{e})
 			}
-			respond.JSON(w, http.StatusOK, cleanupResponse{Cleaned: 1, Merged: merged, Errors: mergeErrs})
+			respond.JSON(w, http.StatusOK, cleanupResponse{Cleaned: 1, Errors: nil})
 			return
 		}
 	}
 	respond.Error(w, http.StatusNotFound, "book not found")
 }
 
-// mergeAllMultiPart scans the library and triggers ABS merge for every
-// multi-part book. It appends any errors to errs and returns the merge count.
-func (h *Handler) mergeAllMultiPart(ctx context.Context, errs *[]string) int {
-	if h.absClient == nil || h.absAPIKey == "" {
-		return 0
-	}
-	entries, err := ScanLibrary(h.libraryDir)
-	if err != nil {
-		return 0
-	}
-	merged := 0
+// mergeMultiPartEntries triggers ABS merge for every multi-part book in entries.
+// Callers must pass only successfully-cleaned entries. Runs in a background
+// goroutine; errors are logged rather than returned.
+func (h *Handler) mergeMultiPartEntries(ctx context.Context, entries []BookEntry) {
 	for _, e := range entries {
 		if !e.IsMultiPart {
 			continue
 		}
-		if err := h.triggerABSMerge(ctx, e.Metadata.Title, e.Metadata.Author); err != nil {
+		title, author := e.absLookupKeys()
+		if err := h.triggerABSMerge(ctx, title, author); err != nil {
 			slog.Warn("library: ABS merge", "author", e.AuthorFolder, "title", e.TitleFolder, "err", err)
-			*errs = append(*errs, fmt.Sprintf("ABS merge %s/%s: %s", e.AuthorFolder, e.TitleFolder, err))
-		} else {
-			merged++
 		}
 	}
-	return merged
+}
+
+// absLookupKeys returns the title and author to use when searching ABS.
+// When metadata comes from folder names, ExpectedTitle/Author are the
+// sanitised canonical forms; Metadata.Title/Author are the raw (dirty) folder
+// names that may not match what ABS has stored.
+func (e BookEntry) absLookupKeys() (title, author string) {
+	if e.MetadataSource == "folder" {
+		return e.ExpectedTitle, e.ExpectedAuthor
+	}
+	return e.Metadata.Title, e.Metadata.Author
 }
 
 // triggerABSMerge finds the ABS library item by title+author and triggers merge.
+// Callers must ensure h.absClient and h.absAPIKey are set before calling.
 func (h *Handler) triggerABSMerge(ctx context.Context, title, author string) error {
-	if h.absClient == nil || h.absAPIKey == "" {
-		return nil
-	}
 	itemID, err := h.absClient.FindLibraryItemByTitleAuthor(ctx, h.absAPIKey, title, author)
 	if err != nil {
 		return fmt.Errorf("find ABS item: %w", err)

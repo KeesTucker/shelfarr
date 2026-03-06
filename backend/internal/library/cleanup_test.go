@@ -55,7 +55,7 @@ func TestSafeRename_Success(t *testing.T) {
 }
 
 func TestCleanupAll_NonExistentDir(t *testing.T) {
-	_, errs := CleanupAll(filepath.Join(t.TempDir(), "no-such"))
+	_, _, errs := CleanupAll(filepath.Join(t.TempDir(), "no-such"))
 	if len(errs) == 0 {
 		t.Error("expected error for non-existent directory")
 	}
@@ -66,7 +66,7 @@ func TestCleanupAll_NothingToClean(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(libDir, "Brandon Sanderson", "The Final Empire"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	cleaned, errs := CleanupAll(libDir)
+	_, cleaned, errs := CleanupAll(libDir)
 	if cleaned != 0 {
 		t.Errorf("expected 0 cleaned, got %d", cleaned)
 	}
@@ -85,7 +85,7 @@ func TestCleanupAll_RenamesBook(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dirty, "ch1.mp3"), []byte("audio"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	cleaned, errs := CleanupAll(libDir)
+	_, cleaned, errs := CleanupAll(libDir)
 	if len(errs) != 0 {
 		t.Fatalf("unexpected errors: %v", errs)
 	}
@@ -305,7 +305,7 @@ func TestCleanupAll_FlattensNestedDirs(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	cleaned, errs := CleanupAll(libDir)
+	_, cleaned, errs := CleanupAll(libDir)
 	if len(errs) != 0 {
 		t.Fatalf("unexpected errors: %v", errs)
 	}

@@ -29,11 +29,12 @@ var ebookExts = map[string]bool{
 // FileInfo groups the file extensions present in a book folder by category.
 // Each slice contains unique extensions without the leading dot, e.g. ["m4b"].
 type FileInfo struct {
-	Audio    []string `json:"audio"`
-	Ebook    []string `json:"ebook"`
-	Metadata []string `json:"metadata"`
-	Images   []string `json:"images"`
-	Other    []string `json:"other"`
+	Audio      []string `json:"audio"`
+	AudioCount int      `json:"-"`
+	Ebook      []string `json:"ebook"`
+	Metadata   []string `json:"metadata"`
+	Images     []string `json:"images"`
+	Other      []string `json:"other"`
 }
 
 // BookEntry describes one book folder (LibraryDir/Author/Title/).
@@ -97,7 +98,7 @@ func scanBook(path, authorFolder, titleFolder string) BookEntry {
 		MetadataSource: source,
 		NeedsRename:    expectedAuthor != authorFolder || expectedTitle != titleFolder,
 		NeedsFlat:      hasNestedDirs(path),
-		IsMultiPart:    countAudioFilesRecursive(path) > 1,
+		IsMultiPart:    files.AudioCount > 1,
 		ExpectedAuthor: expectedAuthor,
 		ExpectedTitle:  expectedTitle,
 		Files:          files,
@@ -137,21 +138,6 @@ func resolveMetadata(dir, titleFolder, authorFolder string, files FileInfo) (*me
 	return &metadata.Book{Title: titleFolder, Author: authorFolder}, "folder"
 }
 
-// countAudioFilesRecursive returns the total number of audio files under dir.
-func countAudioFilesRecursive(dir string) int {
-	count := 0
-	_ = filepath.WalkDir(dir, func(_ string, d fs.DirEntry, err error) error { //nolint:gosec
-		if err != nil || d.IsDir() {
-			return nil
-		}
-		if audioExts[strings.ToLower(filepath.Ext(d.Name()))] {
-			count++
-		}
-		return nil
-	})
-	return count
-}
-
 // hasNestedDirs reports whether dir contains at least one immediate subdirectory.
 func hasNestedDirs(dir string) bool {
 	entries, err := os.ReadDir(dir) //nolint:gosec
@@ -173,6 +159,7 @@ func collectFiles(dir string) FileInfo {
 	meta := map[string]bool{}
 	images := map[string]bool{}
 	other := map[string]bool{}
+	audioCount := 0
 
 	_ = filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error { //nolint:gosec
 		if err != nil || d.IsDir() {
@@ -186,6 +173,7 @@ func collectFiles(dir string) FileInfo {
 		switch {
 		case audioExts[ext]:
 			audio[extNoDot] = true
+			audioCount++
 		case ebookExts[ext]:
 			ebook[extNoDot] = true
 		case ext == ".opf":
@@ -201,11 +189,12 @@ func collectFiles(dir string) FileInfo {
 	})
 
 	return FileInfo{
-		Audio:    mapKeys(audio),
-		Ebook:    mapKeys(ebook),
-		Metadata: mapKeys(meta),
-		Images:   mapKeys(images),
-		Other:    mapKeys(other),
+		Audio:      mapKeys(audio),
+		AudioCount: audioCount,
+		Ebook:      mapKeys(ebook),
+		Metadata:   mapKeys(meta),
+		Images:     mapKeys(images),
+		Other:      mapKeys(other),
 	}
 }
 

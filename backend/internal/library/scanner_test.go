@@ -254,7 +254,7 @@ func TestCollectFiles_SkipsNoExtension(t *testing.T) {
 	}
 }
 
-// ── IsMultiPart / countAudioFilesRecursive ────────────────────────────────────
+// ── IsMultiPart / AudioCount ──────────────────────────────────────────────────
 
 func TestScanBook_IsMultiPartFalseForSingleAudioFile(t *testing.T) {
 	libDir := t.TempDir()
@@ -336,7 +336,7 @@ func TestScanBook_IsMultiPartFalseForNoAudioFiles(t *testing.T) {
 	}
 }
 
-func TestCountAudioFilesRecursive(t *testing.T) {
+func TestCollectFiles_AudioCount(t *testing.T) {
 	dir := t.TempDir()
 	sub := filepath.Join(dir, "sub")
 	if err := os.Mkdir(sub, 0o755); err != nil {
@@ -355,8 +355,8 @@ func TestCountAudioFilesRecursive(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "cover.jpg"), []byte("img"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if n := countAudioFilesRecursive(dir); n != 3 {
-		t.Errorf("countAudioFilesRecursive = %d; want 3", n)
+	if fi := collectFiles(dir); fi.AudioCount != 3 {
+		t.Errorf("AudioCount = %d; want 3", fi.AudioCount)
 	}
 }
 
