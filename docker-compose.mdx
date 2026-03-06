@@ -1,8 +1,13 @@
+# Docker Compose
+
+Save this as `docker-compose.yml` in your deployment directory, create a `.env` file from
+[`.env.example`](./.env.example.mdx), then run `docker compose up -d`.
+
+```yaml title="docker-compose.yml"
 services:
   shelfarr:
     container_name: shelfarr
     image: ghcr.io/keestucker/shelfarr:latest
-    # build: .  # uncomment to build from source instead
     ports:
       - "8008:8008"
     volumes:
@@ -17,14 +22,18 @@ services:
       QBIT_PASSWORD: ${QBIT_PASSWORD}
       QBIT_CATEGORY: shelfarr
       # QBIT_IMPORTED_CATEGORY: shelfarr-imported  # optional: set this category on the torrent after the file is moved to the library
-      # Auto torrent management, enabling this will ensure qbit moves the files
-      # into corresponding folders based on category and status.
+      # Auto torrent management: enabling this ensures qBit moves files into
+      # category-based folders automatically.
       QBIT_AUTO_TMM: "true"
       QBIT_DELETE_ON_REQUEST_DELETE: "false"
       WATCH_TIMEOUT: 24h
-      ABS_URL: ${ABS_URL:-http://audiobookshelf:80}
+      ABS_URL: http://audiobookshelf:80
+      # Optional: enables automatic multi-part audiobook merge on library clean.
+      # ABS → Settings → Users → your user → API Token.
+      ABS_API_KEY: ${ABS_API_KEY:-}
       DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL:-}
       JWT_SECRET: ${JWT_SECRET}
       # COOKIE_INSECURE: "true"  # uncomment only for local dev over plain HTTP (no HTTPS/Cloudflare)
     user: "1000:1000"
     restart: always
+```

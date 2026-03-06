@@ -1,7 +1,9 @@
 package library
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -176,6 +178,219 @@ func TestHandlerCleanup_SingleScanError(t *testing.T) {
 
 	if rr.Code != http.StatusInternalServerError {
 		t.Errorf("expected 500 for scan error, got %d", rr.Code)
+	}
+}
+
+// ── ABS merge integration in Cleanup ─────────────────────────────────────────
+
+// mockABSClient is a controllable absLibraryClient for handler tests.
+type mockABSClient struct {
+	findItemFn  func(ctx context.Context, apiKey, title, author string) (string, error)
+	mergePartFn func(ctx context.Context, apiKey, itemID string) error
+	findCalls   []struct{ title, author string }
+	mergeCalls  []string // item IDs passed to MergeMultiPart
+}
+
+func (m *mockABSClient) FindLibraryItemByTitleAuthor(ctx context.Context, apiKey, title, author string) (string, error) {
+	m.findCalls = append(m.findCalls, struct{ title, author string }{title, author})
+	if m.findItemFn != nil {
+		return m.findItemFn(ctx, apiKey, title, author)
+	}
+	return "", nil
+}
+
+func (m *mockABSClient) MergeMultiPart(ctx context.Context, apiKey, itemID string) error {
+	m.mergeCalls = append(m.mergeCalls, itemID)
+	if m.mergePartFn != nil {
+		return m.mergePartFn(ctx, apiKey, itemID)
+	}
+	return nil
+}
+
+func TestHandlerCleanup_SingleTriggersABSMergeForMultiPartBook(t *testing.T) {
+	libDir := t.TempDir()
+	titlePath := filepath.Join(libDir, "Author", "Book")
+	if err := os.MkdirAll(titlePath, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"part1.mp3", "part2.mp3"} {
+		if err := os.WriteFile(filepath.Join(titlePath, name), []byte("audio"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	mock := &mockABSClient{
+		findItemFn: func(_ context.Context, _, _, _ string) (string, error) { return "li_abc", nil },
+	}
+	h := NewHandler(libDir)
+	h.SetABSClient(mock, "test-key")
+
+	body := `{"author":"Author","title":"Book"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/library/cleanup", strings.NewReader(body))
+	req.ContentLength = int64(len(body))
+	rr := httptest.NewRecorder()
+	h.Cleanup(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	var resp cleanupResponse
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.Merged != 1 {
+		t.Errorf("Merged=%d; want 1", resp.Merged)
+	}
+	if len(mock.mergeCalls) != 1 || mock.mergeCalls[0] != "li_abc" {
+		t.Errorf("MergeMultiPart calls: %v; want [li_abc]", mock.mergeCalls)
+	}
+}
+
+func TestHandlerCleanup_SingleNoABSMergeForSingleAudioFile(t *testing.T) {
+	libDir := t.TempDir()
+	titlePath := filepath.Join(libDir, "Author", "Book")
+	if err := os.MkdirAll(titlePath, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(titlePath, "book.m4b"), []byte("audio"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	mock := &mockABSClient{}
+	h := NewHandler(libDir)
+	h.SetABSClient(mock, "test-key")
+
+	body := `{"author":"Author","title":"Book"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/library/cleanup", strings.NewReader(body))
+	req.ContentLength = int64(len(body))
+	rr := httptest.NewRecorder()
+	h.Cleanup(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+	if len(mock.mergeCalls) != 0 {
+		t.Errorf("expected no merge calls for single-file book; got %v", mock.mergeCalls)
+	}
+}
+
+func TestHandlerCleanup_SingleABSMergeErrorIncludedInResponse(t *testing.T) {
+	libDir := t.TempDir()
+	titlePath := filepath.Join(libDir, "Author", "Book")
+	if err := os.MkdirAll(titlePath, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"p1.mp3", "p2.mp3"} {
+		if err := os.WriteFile(filepath.Join(titlePath, name), []byte("a"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	mock := &mockABSClient{
+		findItemFn: func(_ context.Context, _, _, _ string) (string, error) {
+			return "", errors.New("ABS unreachable")
+		},
+	}
+	h := NewHandler(libDir)
+	h.SetABSClient(mock, "test-key")
+
+	body := `{"author":"Author","title":"Book"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/library/cleanup", strings.NewReader(body))
+	req.ContentLength = int64(len(body))
+	rr := httptest.NewRecorder()
+	h.Cleanup(rr, req)
+
+	// Cleanup itself succeeds; ABS error is non-fatal.
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+	var resp cleanupResponse
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.Merged != 0 {
+		t.Errorf("Merged=%d; want 0 on ABS error", resp.Merged)
+	}
+	if len(resp.Errors) == 0 {
+		t.Error("expected ABS error in response Errors slice")
+	}
+}
+
+func TestHandlerCleanup_AllTriggersABSMergeOnlyForMultiPartBooks(t *testing.T) {
+	libDir := t.TempDir()
+
+	// Multi-part book.
+	multiPath := filepath.Join(libDir, "Author A", "Multi Book")
+	if err := os.MkdirAll(multiPath, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, n := range []string{"p1.mp3", "p2.mp3"} {
+		if err := os.WriteFile(filepath.Join(multiPath, n), []byte("a"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Single-part book.
+	singlePath := filepath.Join(libDir, "Author B", "Single Book")
+	if err := os.MkdirAll(singlePath, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(singlePath, "book.m4b"), []byte("a"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	mock := &mockABSClient{
+		findItemFn: func(_ context.Context, _, _, _ string) (string, error) { return "li_multi", nil },
+	}
+	h := NewHandler(libDir)
+	h.SetABSClient(mock, "test-key")
+
+	req := httptest.NewRequest(http.MethodPost, "/api/library/cleanup", nil)
+	rr := httptest.NewRecorder()
+	h.Cleanup(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	var resp cleanupResponse
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.Merged != 1 {
+		t.Errorf("Merged=%d; want 1 (only multi-part book)", resp.Merged)
+	}
+	if len(mock.mergeCalls) != 1 {
+		t.Errorf("merge calls: %v; want exactly 1", mock.mergeCalls)
+	}
+}
+
+func TestHandlerCleanup_NoABSMergeWhenClientNotConfigured(t *testing.T) {
+	libDir := t.TempDir()
+	titlePath := filepath.Join(libDir, "Author", "Book")
+	if err := os.MkdirAll(titlePath, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, n := range []string{"p1.mp3", "p2.mp3"} {
+		if err := os.WriteFile(filepath.Join(titlePath, n), []byte("a"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// No SetABSClient — ABS not configured.
+	h := NewHandler(libDir)
+	req := httptest.NewRequest(http.MethodPost, "/api/library/cleanup", nil)
+	rr := httptest.NewRecorder()
+	h.Cleanup(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+	var resp cleanupResponse
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.Merged != 0 {
+		t.Errorf("Merged=%d; want 0 when ABS not configured", resp.Merged)
 	}
 }
 

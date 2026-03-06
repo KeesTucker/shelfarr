@@ -34,7 +34,8 @@ type Config struct {
 	WatchTimeout time.Duration // WATCH_TIMEOUT (default: 24h)
 
 	// Audiobookshelf
-	ABSURL string
+	ABSURL    string
+	ABSAPIKey string // ABS_API_KEY (optional) — used for library operations such as multi-part merge
 
 	// Discord
 	DiscordWebhookURL string
@@ -80,6 +81,7 @@ func Load() (*Config, error) {
 		LibraryDir:                getenv("LIBRARY_DIR", "/books"),
 		WatchTimeout:              watchTimeout,
 		ABSURL:                    absURL,
+		ABSAPIKey:                 getenv("ABS_API_KEY", ""),
 		DiscordWebhookURL:         getenv("DISCORD_WEBHOOK_URL", ""),
 		JWTSecret:                 jwtSecret,
 		CookieSecure:              os.Getenv("COOKIE_INSECURE") != "true",

@@ -44,7 +44,8 @@ type BookEntry struct {
 	Metadata       *metadata.Book `json:"metadata"`        // parsed metadata, never nil
 	MetadataSource string         `json:"metadata_source"` // "opf" | "abs_json" | "folder"
 	NeedsRename    bool           `json:"needs_rename"`
-	NeedsFlat      bool           `json:"needs_flat"` // true when files are nested in subdirectories
+	NeedsFlat      bool           `json:"needs_flat"`    // true when files are nested in subdirectories
+	IsMultiPart    bool           `json:"is_multi_part"` // true when folder contains more than one audio file
 	ExpectedAuthor string         `json:"expected_author"`
 	ExpectedTitle  string         `json:"expected_title"`
 	Files          FileInfo       `json:"files"`
@@ -96,6 +97,7 @@ func scanBook(path, authorFolder, titleFolder string) BookEntry {
 		MetadataSource: source,
 		NeedsRename:    expectedAuthor != authorFolder || expectedTitle != titleFolder,
 		NeedsFlat:      hasNestedDirs(path),
+		IsMultiPart:    countAudioFilesRecursive(path) > 1,
 		ExpectedAuthor: expectedAuthor,
 		ExpectedTitle:  expectedTitle,
 		Files:          files,
@@ -133,6 +135,21 @@ func resolveMetadata(dir, titleFolder, authorFolder string, files FileInfo) (*me
 
 	// 3. Fall back to folder names
 	return &metadata.Book{Title: titleFolder, Author: authorFolder}, "folder"
+}
+
+// countAudioFilesRecursive returns the total number of audio files under dir.
+func countAudioFilesRecursive(dir string) int {
+	count := 0
+	_ = filepath.WalkDir(dir, func(_ string, d fs.DirEntry, err error) error { //nolint:gosec
+		if err != nil || d.IsDir() {
+			return nil
+		}
+		if audioExts[strings.ToLower(filepath.Ext(d.Name()))] {
+			count++
+		}
+		return nil
+	})
+	return count
 }
 
 // hasNestedDirs reports whether dir contains at least one immediate subdirectory.
