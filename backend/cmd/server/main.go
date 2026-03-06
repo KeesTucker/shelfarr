@@ -60,6 +60,9 @@ func run() error {
 	prowlarrClient := prowlarr.New(cfg.ProwlarrURL, cfg.ProwlarrAPIKey)
 	qbitClient := qbit.New(cfg.QBitURL, cfg.QBitUsername, cfg.QBitPassword)
 	qbitClient.SetAutoTMM(cfg.QBitAutoTMM)
+	if !cfg.QBitAutoTMM {
+		slog.Info("qbit save path (AutoTMM disabled)", "path", cfg.WatchDir)
+	}
 
 	// ctx is cancelled on SIGINT/SIGTERM to stop background goroutines.
 	ctx, cancel := context.WithCancel(context.Background())
