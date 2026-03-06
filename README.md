@@ -31,3 +31,7 @@ integration:
 
 auth:
 - http only secure cookie
+
+
+attributions:
+- books by Contributor Icons from <a href="https://thenounproject.com/browse/icons/term/books/" target="_blank" title="books Icons">Noun Project</a> (CC BY 3.0)

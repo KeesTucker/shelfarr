@@ -10,6 +10,6 @@
 	let { class: className, children }: Props = $props();
 </script>
 
-<DialogPrimitive.Description class={cn('text-sm text-zinc-400 mt-1 mb-5', className)}>
+<DialogPrimitive.Description class={cn('text-sm text-sepia-500 mt-1 mb-5 dark:text-sepia-400', className)}>
 	{@render children?.()}
 </DialogPrimitive.Description>

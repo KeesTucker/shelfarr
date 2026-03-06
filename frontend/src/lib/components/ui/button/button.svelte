@@ -4,14 +4,13 @@
 	import { cn } from '$lib/utils';
 
 	const buttonVariants = tv({
-		base: 'inline-flex items-center justify-center rounded-lg text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-300 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-900 disabled:pointer-events-none disabled:opacity-50',
+		base: 'inline-flex items-center justify-center rounded-lg text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sepia-600 focus-visible:ring-offset-2 focus-visible:ring-offset-sepia-100 dark:focus-visible:ring-sepia-400 dark:focus-visible:ring-offset-sepia-900 disabled:pointer-events-none disabled:opacity-50',
 		variants: {
 			variant: {
-				default: 'bg-zinc-50 text-zinc-900 hover:bg-zinc-200',
-				outline:
-					'border border-zinc-600 bg-zinc-800 text-zinc-300 hover:bg-zinc-700 hover:text-zinc-100',
-				ghost: 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800',
-				destructive: 'bg-red-600 text-white hover:bg-red-700',
+				default: 'bg-sepia-700 text-sepia-50 hover:bg-sepia-600 dark:bg-sepia-300 dark:text-sepia-950 dark:hover:bg-sepia-200',
+				outline: 'border border-sepia-500 bg-sepia-100 text-sepia-700 hover:bg-sepia-200 hover:text-sepia-900 dark:border-sepia-600 dark:bg-sepia-800 dark:text-sepia-300 dark:hover:bg-sepia-700 dark:hover:text-sepia-100',
+				ghost: 'text-sepia-600 hover:text-sepia-900 hover:bg-sepia-200 dark:text-sepia-400 dark:hover:text-sepia-100 dark:hover:bg-sepia-800',
+				destructive: 'bg-red-700 text-white hover:bg-red-600',
 			},
 			size: {
 				default: 'px-4 py-2',

@@ -10,7 +10,7 @@
 </script>
 
 <div
-	class={cn('rounded-xl border border-zinc-800 bg-zinc-900 shadow-2xl', className)}
+	class={cn('rounded-xl border border-sepia-400 bg-sepia-100 shadow-md dark:border-sepia-700 dark:bg-sepia-900', className)}
 >
 	{@render children?.()}
 </div>

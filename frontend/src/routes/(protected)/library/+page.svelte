@@ -15,11 +15,7 @@
 		other: string[] | null;
 	}
 
-	interface BookMeta {
-		title: string;
-		author: string;
-		year?: number;
-	}
+	interface BookMeta { title: string; author: string; year?: number; }
 
 	interface BookEntry {
 		author_folder: string;
@@ -34,33 +30,24 @@
 		files: FileInfo;
 	}
 
-	interface CleanupResult {
-		cleaned: number;
-		errors: string[] | null;
-	}
+	interface CleanupResult { cleaned: number; errors: string[] | null; }
 
 	let books = $state<BookEntry[]>([]);
 	let loading = $state(true);
 	let error = $state('');
-
 	let cleaning = $state<Set<string>>(new Set());
 	let cleaningAll = $state(false);
 	let pruning = $state(false);
-
 	let toast = $state<{ message: string; type: 'success' | 'error' } | null>(null);
 	let toastTimeout: ReturnType<typeof setTimeout> | null = null;
 
 	onMount(async () => {
-		if (!authStore.isAdmin) {
-			goto('/');
-			return;
-		}
+		if (!authStore.isAdmin) { goto('/'); return; }
 		await load();
 	});
 
 	async function load() {
-		loading = true;
-		error = '';
+		loading = true; error = '';
 		try {
 			books = await api.get<BookEntry[]>('/api/library');
 		} catch (e) {
@@ -74,23 +61,13 @@
 		const key = `${book.author_folder}/${book.title_folder}`;
 		cleaning = new Set([...cleaning, key]);
 		try {
-			const res = await api.post<CleanupResult>('/api/library/cleanup', {
-				author: book.author_folder,
-				title: book.title_folder
-			});
-			showToast(
-				res.errors?.length
-					? `Cleaned with errors: ${res.errors.join('; ')}`
-					: `"${book.title_folder}" cleaned`,
-				res.errors?.length ? 'error' : 'success'
-			);
+			const res = await api.post<CleanupResult>('/api/library/cleanup', { author: book.author_folder, title: book.title_folder });
+			showToast(res.errors?.length ? `Cleaned with errors: ${res.errors.join('; ')}` : `"${book.title_folder}" cleaned`, res.errors?.length ? 'error' : 'success');
 			await load();
 		} catch (e) {
 			showToast(e instanceof Error ? e.message : 'Cleanup failed', 'error');
 		} finally {
-			const next = new Set(cleaning);
-			next.delete(key);
-			cleaning = next;
+			const next = new Set(cleaning); next.delete(key); cleaning = next;
 		}
 	}
 
@@ -98,12 +75,7 @@
 		pruning = true;
 		try {
 			const res = await api.post<{ removed: number }>('/api/library/prune', {});
-			showToast(
-				res.removed === 0
-					? 'No empty directories found'
-					: `Removed ${res.removed} empty director${res.removed !== 1 ? 'ies' : 'y'}`,
-				'success'
-			);
+			showToast(res.removed === 0 ? 'No empty directories found' : `Removed ${res.removed} empty director${res.removed !== 1 ? 'ies' : 'y'}`, 'success');
 			await load();
 		} catch (e) {
 			showToast(e instanceof Error ? e.message : 'Prune failed', 'error');
@@ -116,10 +88,7 @@
 		cleaningAll = true;
 		try {
 			const res = await api.post<CleanupResult>('/api/library/cleanup', {});
-			const msg =
-				res.errors?.length
-					? `Cleaned ${res.cleaned}, ${res.errors.length} error(s): ${res.errors.join('; ')}`
-					: `Cleaned ${res.cleaned} book${res.cleaned !== 1 ? 's' : ''}`;
+			const msg = res.errors?.length ? `Cleaned ${res.cleaned}, ${res.errors.length} error(s): ${res.errors.join('; ')}` : `Cleaned ${res.cleaned} book${res.cleaned !== 1 ? 's' : ''}`;
 			showToast(msg, res.errors?.length ? 'error' : 'success');
 			await load();
 		} catch (e) {
@@ -132,9 +101,7 @@
 	function showToast(message: string, type: 'success' | 'error') {
 		if (toastTimeout !== null) clearTimeout(toastTimeout);
 		toast = { message, type };
-		toastTimeout = setTimeout(() => {
-			toast = null;
-		}, 5000);
+		toastTimeout = setTimeout(() => { toast = null; }, 5000);
 	}
 
 	function sourceLabel(src: string) {
@@ -149,12 +116,12 @@
 <main class="mx-auto max-w-6xl px-4 py-8">
 	<div class="flex items-center justify-between mb-6">
 		<div>
-			<h1 class="text-2xl font-bold text-zinc-100">Library</h1>
+			<h1 class="text-2xl font-bold text-sepia-800 dark:text-sepia-100 font-playfair">Library</h1>
 			{#if !loading && !error}
-				<p class="text-xs text-zinc-500 mt-1">
+				<p class="text-xs text-sepia-500 mt-1">
 					{books.length} book{books.length !== 1 ? 's' : ''}
 					{#if needsCleanupCount > 0}
-						· <span class="text-amber-400">{needsCleanupCount} need{needsCleanupCount !== 1 ? '' : 's'} cleanup</span>
+						· <span class="text-amber-700 dark:text-amber-400">{needsCleanupCount} need{needsCleanupCount !== 1 ? '' : 's'} cleanup</span>
 					{/if}
 				</p>
 			{/if}
@@ -165,21 +132,17 @@
 			</Button>
 			<Button variant="outline" onclick={pruneEmptyDirs} disabled={pruning}>
 				{#if pruning}
-					<Loader2 class="w-4 h-4 mr-2 animate-spin" />
-					Pruning…
+					<Loader2 class="w-4 h-4 mr-2 animate-spin" />Pruning…
 				{:else}
-					<Trash2 class="w-4 h-4 mr-2" />
-					Prune empty dirs
+					<Trash2 class="w-4 h-4 mr-2" />Prune empty dirs
 				{/if}
 			</Button>
 			{#if needsCleanupCount > 0}
 				<Button onclick={cleanAll} disabled={cleaningAll}>
 					{#if cleaningAll}
-						<Loader2 class="w-4 h-4 mr-2 animate-spin" />
-						Cleaning…
+						<Loader2 class="w-4 h-4 mr-2 animate-spin" />Cleaning…
 					{:else}
-						<Wand2 class="w-4 h-4 mr-2" />
-						Clean all ({needsCleanupCount})
+						<Wand2 class="w-4 h-4 mr-2" />Clean all ({needsCleanupCount})
 					{/if}
 				</Button>
 			{/if}
@@ -187,47 +150,45 @@
 	</div>
 
 	{#if loading}
-		<div class="flex items-center justify-center gap-2 py-16 text-sm text-zinc-400">
+		<div class="flex items-center justify-center gap-2 py-16 text-sm text-sepia-500">
 			<Loader2 class="w-4 h-4 animate-spin" />
 			Scanning library…
 		</div>
 	{:else if error}
-		<div class="rounded-lg border border-red-900 bg-red-950/40 px-4 py-3 text-sm text-red-400">
+		<div class="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-400">
 			{error}
 		</div>
 	{:else if books.length === 0}
-		<div class="py-16 text-center text-sm text-zinc-500">
-			No books found in the library directory.
-		</div>
+		<div class="py-16 text-center text-sm text-sepia-500">No books found in the library directory.</div>
 	{:else}
-		<div class="rounded-xl border border-zinc-800 overflow-hidden">
+		<div class="rounded-xl border border-sepia-400 overflow-hidden dark:border-sepia-700">
 			<div class="overflow-x-auto">
 				<table class="w-full text-sm">
-					<thead class="bg-zinc-900 border-b border-zinc-800">
+					<thead class="bg-sepia-200 border-b border-sepia-400 dark:bg-sepia-900 dark:border-sepia-700">
 						<tr>
-							<th class="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wide">Author</th>
-							<th class="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wide">Title</th>
-							<th class="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wide hidden md:table-cell">Files</th>
-							<th class="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wide hidden sm:table-cell">Source</th>
-							<th class="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wide">Status</th>
+							<th class="px-4 py-3 text-left text-xs font-medium text-sepia-600 uppercase tracking-wide dark:text-sepia-400">Author</th>
+							<th class="px-4 py-3 text-left text-xs font-medium text-sepia-600 uppercase tracking-wide dark:text-sepia-400">Title</th>
+							<th class="px-4 py-3 text-left text-xs font-medium text-sepia-600 uppercase tracking-wide hidden md:table-cell dark:text-sepia-400">Files</th>
+							<th class="px-4 py-3 text-left text-xs font-medium text-sepia-600 uppercase tracking-wide hidden sm:table-cell dark:text-sepia-400">Source</th>
+							<th class="px-4 py-3 text-left text-xs font-medium text-sepia-600 uppercase tracking-wide dark:text-sepia-400">Status</th>
 							<th class="px-2 py-3"></th>
 						</tr>
 					</thead>
-					<tbody class="divide-y divide-zinc-800">
+					<tbody class="divide-y divide-sepia-300 dark:divide-sepia-800">
 						{#each books as book (`${book.author_folder}/${book.title_folder}`)}
 							{@const key = `${book.author_folder}/${book.title_folder}`}
 							{@const isCleaning = cleaning.has(key)}
-							<tr class="bg-zinc-950 hover:bg-zinc-900 transition-colors">
+							<tr class="bg-sepia-50 hover:bg-sepia-100 transition-colors dark:bg-sepia-950 dark:hover:bg-sepia-900">
 								<td class="px-4 py-3">
-									<div class="text-zinc-100 leading-snug">{book.author_folder}</div>
+									<div class="text-sepia-900 leading-snug dark:text-sepia-100">{book.author_folder}</div>
 									{#if book.needs_rename && book.expected_author !== book.author_folder}
-										<div class="text-xs text-amber-400 mt-0.5">→ {book.expected_author}</div>
+										<div class="text-xs text-amber-700 mt-0.5 dark:text-amber-400">→ {book.expected_author}</div>
 									{/if}
 								</td>
 								<td class="px-4 py-3">
-									<div class="text-zinc-100 leading-snug">{book.title_folder}</div>
+									<div class="text-sepia-900 leading-snug dark:text-sepia-100">{book.title_folder}</div>
 									{#if book.needs_rename && book.expected_title !== book.title_folder}
-										<div class="text-xs text-amber-400 mt-0.5">→ {book.expected_title}</div>
+										<div class="text-xs text-amber-700 mt-0.5 dark:text-amber-400">→ {book.expected_title}</div>
 									{/if}
 								</td>
 								<td class="px-4 py-3 hidden md:table-cell">
@@ -250,21 +211,21 @@
 									</div>
 								</td>
 								<td class="px-4 py-3 hidden sm:table-cell">
-									<span class="text-xs text-zinc-500">{sourceLabel(book.metadata_source)}</span>
+									<span class="text-xs text-sepia-500">{sourceLabel(book.metadata_source)}</span>
 								</td>
 								<td class="px-4 py-3">
 									{#if book.needs_rename}
-										<div class="flex items-center gap-1.5 text-amber-400">
+										<div class="flex items-center gap-1.5 text-amber-700 dark:text-amber-400">
 											<AlertTriangle class="w-3.5 h-3.5 shrink-0" />
 											<span class="text-xs">Mismatch</span>
 										</div>
 									{:else if book.needs_flat}
-										<div class="flex items-center gap-1.5 text-blue-400">
+										<div class="flex items-center gap-1.5 text-blue-700 dark:text-blue-400">
 											<AlertTriangle class="w-3.5 h-3.5 shrink-0" />
 											<span class="text-xs">Nested</span>
 										</div>
 									{:else}
-										<div class="flex items-center gap-1.5 text-green-500">
+										<div class="flex items-center gap-1.5 text-green-700 dark:text-green-400">
 											<CheckCircle2 class="w-3.5 h-3.5 shrink-0" />
 											<span class="text-xs">OK</span>
 										</div>
@@ -272,7 +233,7 @@
 								</td>
 								<td class="px-2 py-3">
 									<button
-										class="flex items-center gap-1.5 px-2.5 py-1 rounded text-xs text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+										class="flex items-center gap-1.5 px-2.5 py-1 rounded text-xs text-sepia-500 hover:text-sepia-900 hover:bg-sepia-200 transition-colors disabled:opacity-40 disabled:cursor-not-allowed dark:text-sepia-500 dark:hover:text-sepia-100 dark:hover:bg-sepia-800"
 										disabled={!book.needs_rename && !book.needs_flat || isCleaning}
 										onclick={() => cleanBook(book)}
 										title="Clean up this book"
@@ -296,9 +257,9 @@
 
 {#if toast}
 	<div
-		class="fixed bottom-6 right-6 z-[60] max-w-sm rounded-xl border px-4 py-3 text-sm shadow-2xl transition-all {toast.type === 'success'
-			? 'border-green-800 bg-green-950 text-green-300'
-			: 'border-red-800 bg-red-950 text-red-300'}"
+		class="fixed bottom-6 right-6 z-[60] max-w-sm rounded-xl border px-4 py-3 text-sm shadow-xl transition-all {toast.type === 'success'
+			? 'border-green-400 bg-green-50 text-green-800 dark:border-green-800 dark:bg-green-950 dark:text-green-300'
+			: 'border-red-400 bg-red-50 text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-300'}"
 	>
 		{toast.message}
 	</div>
