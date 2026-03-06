@@ -46,9 +46,9 @@ body {
 	margin: 0;
 	font-family: 'EB Garamond', Georgia, 'Times New Roman', serif;
 	-webkit-font-smoothing: antialiased;
-	background-color: #fdf8f0;
+	background-color: var(--color-sepia-50);
 }
 
 html.dark body {
-	background-color: #120a04;
+	background-color: var(--color-sepia-950);
 }
