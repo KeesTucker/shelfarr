@@ -6,13 +6,17 @@ function createTheme() {
 	);
 
 	function init() {
-		dark = localStorage.getItem('theme') === 'dark';
+		try {
+			dark = localStorage.getItem('theme') === 'dark';
+		} catch {}
 		apply();
 	}
 
 	function toggle() {
 		dark = !dark;
-		localStorage.setItem('theme', dark ? 'dark' : 'light');
+		try {
+			localStorage.setItem('theme', dark ? 'dark' : 'light');
+		} catch {}
 		apply();
 	}
 
