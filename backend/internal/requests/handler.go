@@ -137,20 +137,11 @@ func (h *Handler) Submit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// When AutoTMM is enabled qBittorrent determines the save path from the
-	// category configuration, so we skip fetching it. Without AutoTMM we need
-	// the default save path so qBit knows where to put the files.
-	var (
-		savePath string
-		err      error
-	)
+	// When AutoTMM is enabled qBittorrent determines the save path from its
+	// category configuration. Without AutoTMM we pass /downloads directly.
+	savePath := ""
 	if !h.qbit.AutoTMM() {
-		savePath, err = h.qbit.GetDefaultSavePath(r.Context())
-		if err != nil {
-			slog.Error("get qbit save path", "err", err)
-			respond.Error(w, http.StatusBadGateway, "could not determine qBittorrent download path")
-			return
-		}
+		savePath = h.watchDir
 	}
 
 	// Add torrent to qBittorrent and retrieve the assigned infohash.
