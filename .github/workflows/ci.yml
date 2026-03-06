@@ -93,6 +93,9 @@ jobs:
       - name: Sync SvelteKit
         run: npx svelte-kit sync
 
+      - name: Lint
+        run: npm run lint
+
       - name: Check
         run: npm run check
 
