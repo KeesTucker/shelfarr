@@ -7,7 +7,7 @@ book management app.
 
 born out of frustrations with readarr/lazylibrarian/audiobookrequest.
 
-a lot of ai generated shit. I do not like ai. I am a hippocrit. 
+a lot of ai generated shit. I do not like ai. I am a hippocrite. 
 
 I would not use this until further notice, it's probably full of heinous security issues. If you do use it, at least put it behind zero trust.
 
