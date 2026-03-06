@@ -164,6 +164,8 @@
 										<span class="font-medium text-sepia-900 leading-snug dark:text-sepia-100">{req.title}</span>
 										{#if req.mediaType === 'ebook'}
 											<span class="inline-block rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide {fileTypeClass('ebook')}">ebook</span>
+										{:else}
+											<span class="inline-block rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide {fileTypeClass('audio')}">audiobook</span>
 										{/if}
 									</div>
 									<div class="text-xs text-sepia-600 mt-0.5 dark:text-sepia-400">{req.author}</div>
