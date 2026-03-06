@@ -10,6 +10,6 @@
 	let { class: className, children }: Props = $props();
 </script>
 
-<DialogPrimitive.Title class={cn('text-lg font-semibold text-zinc-50', className)}>
+<DialogPrimitive.Title class={cn('text-lg font-semibold text-sepia-800 dark:text-sepia-100', className)}>
 	{@render children?.()}
 </DialogPrimitive.Title>

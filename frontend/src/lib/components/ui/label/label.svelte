@@ -9,6 +9,6 @@
 	let { class: className, children, ...props }: Props = $props();
 </script>
 
-<label class={cn('block text-sm font-medium text-zinc-300', className)} {...props}>
+<label class={cn('block text-sm font-medium text-sepia-700 dark:text-sepia-300', className)} {...props}>
 	{@render children?.()}
 </label>

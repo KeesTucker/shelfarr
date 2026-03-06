@@ -1,5 +1,21 @@
 @import "tailwindcss";
 
+@variant dark (&:where(.dark, .dark *));
+
+@theme {
+	--color-sepia-50:  #fdf8f0;
+	--color-sepia-100: #f5ead8;
+	--color-sepia-200: #e8d5b5;
+	--color-sepia-300: #d4b896;
+	--color-sepia-400: #b8956a;
+	--color-sepia-500: #8b6340;
+	--color-sepia-600: #6b4423;
+	--color-sepia-700: #4e2f10;
+	--color-sepia-800: #341e08;
+	--color-sepia-900: #1e1005;
+	--color-sepia-950: #0f0802;
+}
+
 *,
 *::before,
 *::after {
@@ -7,13 +23,20 @@
 }
 
 html {
+	color-scheme: light;
+}
+
+html.dark {
 	color-scheme: dark;
 }
 
 body {
 	margin: 0;
-	font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
-		sans-serif;
+	font-family: 'EB Garamond', Georgia, 'Times New Roman', serif;
 	-webkit-font-smoothing: antialiased;
-	background-color: #09090b; /* zinc-950 baseline */
+	background-color: #fdf8f0;
+}
+
+html.dark body {
+	background-color: #120a04;
 }
