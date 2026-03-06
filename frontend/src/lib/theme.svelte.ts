@@ -1,5 +1,9 @@
 function createTheme() {
-	let dark = $state(false);
+	let dark = $state(
+		typeof document !== 'undefined'
+			? document.documentElement.classList.contains('dark')
+			: false
+	);
 
 	function init() {
 		dark = localStorage.getItem('theme') === 'dark';

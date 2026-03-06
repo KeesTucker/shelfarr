@@ -12,7 +12,7 @@
 
 <DialogPrimitive.Portal>
 	<DialogPrimitive.Overlay
-		class="fixed inset-0 z-50 bg-sepia-900/40 backdrop-blur-sm data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0"
+		class="fixed inset-0 z-50 bg-sepia-900/40 dark:bg-sepia-950/70 backdrop-blur-sm data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0"
 	/>
 	<DialogPrimitive.Content
 		class={cn(
