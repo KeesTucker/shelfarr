@@ -11,7 +11,7 @@
 			<a href="/" class="text-sm text-sepia-500 hover:text-sepia-800 transition-colors dark:text-sepia-500 dark:hover:text-sepia-200">← Back</a>
 		</div>
 
-		<h1 class="text-3xl font-bold text-sepia-800 mb-8 dark:text-sepia-100" style="font-family: 'Playfair Display', serif;">
+		<h1 class="text-3xl font-bold text-sepia-800 mb-8 dark:text-sepia-100 font-playfair">
 			Attributions
 		</h1>
 

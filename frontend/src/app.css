@@ -24,6 +24,10 @@
 	--color-sepia-950: #0f0802;
 }
 
+@utility font-playfair {
+	font-family: 'Playfair Display', Georgia, serif;
+}
+
 *,
 *::before,
 *::after {

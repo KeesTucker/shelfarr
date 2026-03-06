@@ -116,7 +116,7 @@
 <main class="mx-auto max-w-6xl px-4 py-8">
 	<div class="flex items-center justify-between mb-6">
 		<div>
-			<h1 class="text-2xl font-bold text-sepia-800 dark:text-sepia-100" style="font-family: 'Playfair Display', serif;">Library</h1>
+			<h1 class="text-2xl font-bold text-sepia-800 dark:text-sepia-100 font-playfair">Library</h1>
 			{#if !loading && !error}
 				<p class="text-xs text-sepia-500 mt-1">
 					{books.length} book{books.length !== 1 ? 's' : ''}

@@ -113,7 +113,7 @@
 
 <main class="mx-auto max-w-5xl px-4 py-8">
 	<div class="flex items-center justify-between mb-6">
-		<h1 class="text-2xl font-bold text-sepia-800 dark:text-sepia-100" style="font-family: 'Playfair Display', serif;">
+		<h1 class="text-2xl font-bold text-sepia-800 dark:text-sepia-100 font-playfair">
 			{authStore.isAdmin ? 'All Requests' : 'My Requests'}
 		</h1>
 		{#if authStore.isAdmin}

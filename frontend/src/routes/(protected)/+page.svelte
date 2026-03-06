@@ -143,7 +143,7 @@
 
 <main class="mx-auto max-w-5xl px-4 py-8">
 	<div class="flex items-center justify-between mb-6">
-		<h1 class="text-2xl font-bold text-sepia-800 dark:text-sepia-100" style="font-family: 'Playfair Display', serif;">
+		<h1 class="text-2xl font-bold text-sepia-800 dark:text-sepia-100 font-playfair">
 			Find a{mediaType === 'ebook' ? 'n Ebook' : 'n Audiobook'}
 		</h1>
 		<div class="flex rounded-lg border border-sepia-400 overflow-hidden text-sm dark:border-sepia-700">
