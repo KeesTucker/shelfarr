@@ -207,7 +207,7 @@ func TestSearchHandlerTypeParam(t *testing.T) {
 		if tc.typeParam != "" {
 			url += "&type=" + tc.typeParam
 		}
-		req := httptest.NewRequest(http.MethodGet, url, nil)
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, url, nil)
 		rr := httptest.NewRecorder()
 		h.Search(rr, req)
 		if rr.Code != http.StatusOK {
@@ -222,7 +222,7 @@ func TestSearchHandlerTypeParam(t *testing.T) {
 
 func TestSearchHandlerMissingQ(t *testing.T) {
 	h := NewHandler(New("http://fake", "key"))
-	req := httptest.NewRequest(http.MethodGet, "/api/search", nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/search", nil)
 	rr := httptest.NewRecorder()
 	h.Search(rr, req)
 
@@ -234,7 +234,7 @@ func TestSearchHandlerMissingQ(t *testing.T) {
 func TestSearchHandlerProwlarrDown(t *testing.T) {
 	// Point at a server that immediately refuses connections.
 	h := NewHandler(New("http://127.0.0.1:1", "key"))
-	req := httptest.NewRequest(http.MethodGet, "/api/search?q=test", nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/search?q=test", nil)
 	rr := httptest.NewRecorder()
 	h.Search(rr, req)
 
@@ -279,7 +279,7 @@ func TestSearchHandlerOK(t *testing.T) {
 	client := New(srv.URL, "testkey")
 	h := NewHandler(client)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/search?q=Mistborn", nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/search?q=Mistborn", nil)
 	rr := httptest.NewRecorder()
 	h.Search(rr, req)
 

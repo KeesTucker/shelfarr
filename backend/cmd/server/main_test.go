@@ -56,7 +56,7 @@ func TestProtectedRoutesRequireAuth(t *testing.T) {
 
 	for _, tc := range routes {
 		t.Run(tc.method+" "+tc.path, func(t *testing.T) {
-			req := httptest.NewRequest(tc.method, tc.path, nil)
+			req := httptest.NewRequestWithContext(t.Context(), tc.method, tc.path, nil)
 			rr := httptest.NewRecorder()
 			router.ServeHTTP(rr, req)
 			if rr.Code != http.StatusUnauthorized {
@@ -89,7 +89,7 @@ func TestAdminOnlyRoutesRequireAdmin(t *testing.T) {
 
 	for _, tc := range routes {
 		t.Run(tc.method+" "+tc.path, func(t *testing.T) {
-			req := httptest.NewRequest(tc.method, tc.path, nil)
+			req := httptest.NewRequestWithContext(t.Context(), tc.method, tc.path, nil)
 			req.AddCookie(&http.Cookie{Name: auth.AuthCookieName, Value: userToken})
 			rr := httptest.NewRecorder()
 			router.ServeHTTP(rr, req)
@@ -114,7 +114,7 @@ func TestPublicRoutes(t *testing.T) {
 
 	for _, tc := range routes {
 		t.Run(tc.method+" "+tc.path, func(t *testing.T) {
-			req := httptest.NewRequest(tc.method, tc.path, nil)
+			req := httptest.NewRequestWithContext(t.Context(), tc.method, tc.path, nil)
 			rr := httptest.NewRecorder()
 			router.ServeHTTP(rr, req)
 			if rr.Code == http.StatusUnauthorized {

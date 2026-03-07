@@ -29,11 +29,12 @@ var ebookExts = map[string]bool{
 // FileInfo groups the file extensions present in a book folder by category.
 // Each slice contains unique extensions without the leading dot, e.g. ["m4b"].
 type FileInfo struct {
-	Audio    []string `json:"audio"`
-	Ebook    []string `json:"ebook"`
-	Metadata []string `json:"metadata"`
-	Images   []string `json:"images"`
-	Other    []string `json:"other"`
+	Audio      []string `json:"audio"`
+	AudioCount int      `json:"-"`
+	Ebook      []string `json:"ebook"`
+	Metadata   []string `json:"metadata"`
+	Images     []string `json:"images"`
+	Other      []string `json:"other"`
 }
 
 // BookEntry describes one book folder (LibraryDir/Author/Title/).
@@ -44,7 +45,8 @@ type BookEntry struct {
 	Metadata       *metadata.Book `json:"metadata"`        // parsed metadata, never nil
 	MetadataSource string         `json:"metadata_source"` // "opf" | "abs_json" | "folder"
 	NeedsRename    bool           `json:"needs_rename"`
-	NeedsFlat      bool           `json:"needs_flat"` // true when files are nested in subdirectories
+	NeedsFlat      bool           `json:"needs_flat"`    // true when files are nested in subdirectories
+	IsMultiPart    bool           `json:"is_multi_part"` // true when folder contains more than one audio file
 	ExpectedAuthor string         `json:"expected_author"`
 	ExpectedTitle  string         `json:"expected_title"`
 	Files          FileInfo       `json:"files"`
@@ -96,6 +98,7 @@ func scanBook(path, authorFolder, titleFolder string) BookEntry {
 		MetadataSource: source,
 		NeedsRename:    expectedAuthor != authorFolder || expectedTitle != titleFolder,
 		NeedsFlat:      hasNestedDirs(path),
+		IsMultiPart:    files.AudioCount > 1,
 		ExpectedAuthor: expectedAuthor,
 		ExpectedTitle:  expectedTitle,
 		Files:          files,
@@ -156,6 +159,7 @@ func collectFiles(dir string) FileInfo {
 	meta := map[string]bool{}
 	images := map[string]bool{}
 	other := map[string]bool{}
+	audioCount := 0
 
 	_ = filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error { //nolint:gosec
 		if err != nil || d.IsDir() {
@@ -169,6 +173,7 @@ func collectFiles(dir string) FileInfo {
 		switch {
 		case audioExts[ext]:
 			audio[extNoDot] = true
+			audioCount++
 		case ebookExts[ext]:
 			ebook[extNoDot] = true
 		case ext == ".opf":
@@ -184,11 +189,12 @@ func collectFiles(dir string) FileInfo {
 	})
 
 	return FileInfo{
-		Audio:    mapKeys(audio),
-		Ebook:    mapKeys(ebook),
-		Metadata: mapKeys(meta),
-		Images:   mapKeys(images),
-		Other:    mapKeys(other),
+		Audio:      mapKeys(audio),
+		AudioCount: audioCount,
+		Ebook:      mapKeys(ebook),
+		Metadata:   mapKeys(meta),
+		Images:     mapKeys(images),
+		Other:      mapKeys(other),
 	}
 }
 

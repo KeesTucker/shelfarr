@@ -128,14 +128,16 @@ func CleanupBook(libraryDir string, entry BookEntry) error {
 }
 
 // CleanupAll scans libraryDir, finds all books that need renaming, and cleans
-// each one. Returns the number cleaned and a slice of error strings.
-func CleanupAll(libraryDir string) (int, []string) {
+// each one. Returns only the successfully-cleaned entries (for callers that
+// need to act on them, e.g. to trigger ABS merge), the number cleaned, and
+// any errors.
+func CleanupAll(libraryDir string) ([]BookEntry, int, []string) {
 	entries, err := ScanLibrary(libraryDir)
 	if err != nil {
-		return 0, []string{fmt.Sprintf("scan library: %s", err)}
+		return nil, 0, []string{fmt.Sprintf("scan library: %s", err)}
 	}
 
-	cleaned := 0
+	var cleanedEntries []BookEntry
 	var errs []string
 	for _, e := range entries {
 		if !e.NeedsRename && !e.NeedsFlat {
@@ -144,10 +146,10 @@ func CleanupAll(libraryDir string) (int, []string) {
 		if err := CleanupBook(libraryDir, e); err != nil {
 			errs = append(errs, fmt.Sprintf("%s/%s: %s", e.AuthorFolder, e.TitleFolder, err))
 		} else {
-			cleaned++
+			cleanedEntries = append(cleanedEntries, e)
 		}
 	}
-	return cleaned, errs
+	return cleanedEntries, len(cleanedEntries), errs
 }
 
 // safeRename performs os.Rename but checks that the source exists first.

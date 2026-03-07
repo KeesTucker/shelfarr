@@ -94,10 +94,10 @@ func authReq(t *testing.T, method, target, body string, cfg auth.TokenConfig, us
 	t.Helper()
 	var req *http.Request
 	if body != "" {
-		req = httptest.NewRequest(method, target, strings.NewReader(body))
+		req = httptest.NewRequestWithContext(t.Context(), method, target, strings.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
 	} else {
-		req = httptest.NewRequest(method, target, nil)
+		req = httptest.NewRequestWithContext(t.Context(), method, target, nil)
 	}
 
 	tokenStr, err := auth.NewToken(cfg, userID, username, role)

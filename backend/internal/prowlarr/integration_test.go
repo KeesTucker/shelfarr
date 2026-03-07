@@ -118,7 +118,7 @@ func TestIntegration_HandlerSearch(t *testing.T) {
 	h := prowlarr.NewHandler(client)
 	query := searchQuery()
 
-	req := httptest.NewRequest(http.MethodGet, "/api/search?q="+url.QueryEscape(query), nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/search?q="+url.QueryEscape(query), nil)
 	rr := httptest.NewRecorder()
 	h.Search(rr, req)
 
@@ -150,7 +150,7 @@ func TestIntegration_HandlerRankingAbridgedLast(t *testing.T) {
 	h := prowlarr.NewHandler(client)
 	query := searchQuery()
 
-	req := httptest.NewRequest(http.MethodGet, "/api/search?q="+url.QueryEscape(query), nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/search?q="+url.QueryEscape(query), nil)
 	rr := httptest.NewRecorder()
 	h.Search(rr, req)
 
@@ -214,7 +214,7 @@ func TestIntegration_HandlerMissingQuery(t *testing.T) {
 	client := integrationClient(t)
 	h := prowlarr.NewHandler(client)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/search", nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/search", nil)
 	rr := httptest.NewRecorder()
 	h.Search(rr, req)
 

@@ -74,6 +74,9 @@ func run() error {
 
 	mover := library.New(cfg.WatchDir, cfg.LibraryDir, cfg.WatchTimeout)
 	libraryHandler := library.NewHandler(cfg.LibraryDir)
+	if cfg.ABSAPIKey != "" {
+		libraryHandler.SetABSClient(absClient, cfg.ABSAPIKey)
+	}
 
 	// lookupUsername returns the username for a user ID, falling back to the
 	// raw ID if the DB lookup fails (e.g. user deleted between request and completion).

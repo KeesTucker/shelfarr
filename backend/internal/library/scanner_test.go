@@ -254,6 +254,112 @@ func TestCollectFiles_SkipsNoExtension(t *testing.T) {
 	}
 }
 
+// ── IsMultiPart / AudioCount ──────────────────────────────────────────────────
+
+func TestScanBook_IsMultiPartFalseForSingleAudioFile(t *testing.T) {
+	libDir := t.TempDir()
+	titlePath := filepath.Join(libDir, "Author", "Book")
+	if err := os.MkdirAll(titlePath, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(titlePath, "book.m4b"), []byte("audio"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	entries, err := ScanLibrary(libDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if entries[0].IsMultiPart {
+		t.Error("IsMultiPart should be false for a single audio file")
+	}
+}
+
+func TestScanBook_IsMultiPartTrueForMultipleFiles(t *testing.T) {
+	libDir := t.TempDir()
+	titlePath := filepath.Join(libDir, "Author", "Book")
+	if err := os.MkdirAll(titlePath, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"part1.mp3", "part2.mp3"} {
+		if err := os.WriteFile(filepath.Join(titlePath, name), []byte("audio"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	entries, err := ScanLibrary(libDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !entries[0].IsMultiPart {
+		t.Error("IsMultiPart should be true for multiple audio files")
+	}
+}
+
+func TestScanBook_IsMultiPartTrueForFilesInSubdirs(t *testing.T) {
+	libDir := t.TempDir()
+	titlePath := filepath.Join(libDir, "Author", "Book")
+	if err := os.MkdirAll(filepath.Join(titlePath, "disc1"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(titlePath, "disc2"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(titlePath, "disc1", "ch1.mp3"), []byte("a"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(titlePath, "disc2", "ch1.mp3"), []byte("b"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	entries, err := ScanLibrary(libDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !entries[0].IsMultiPart {
+		t.Error("IsMultiPart should be true when audio files are spread across subdirs")
+	}
+}
+
+func TestScanBook_IsMultiPartFalseForNoAudioFiles(t *testing.T) {
+	libDir := t.TempDir()
+	titlePath := filepath.Join(libDir, "Author", "Book")
+	if err := os.MkdirAll(titlePath, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(titlePath, "cover.jpg"), []byte("img"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	entries, err := ScanLibrary(libDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if entries[0].IsMultiPart {
+		t.Error("IsMultiPart should be false when there are no audio files")
+	}
+}
+
+func TestCollectFiles_AudioCount(t *testing.T) {
+	dir := t.TempDir()
+	sub := filepath.Join(dir, "sub")
+	if err := os.Mkdir(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"a.mp3", "b.m4b"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("a"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// file in subdir — should still count
+	if err := os.WriteFile(filepath.Join(sub, "c.flac"), []byte("a"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// non-audio file — should not count
+	if err := os.WriteFile(filepath.Join(dir, "cover.jpg"), []byte("img"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if fi := collectFiles(dir); fi.AudioCount != 3 {
+		t.Errorf("AudioCount = %d; want 3", fi.AudioCount)
+	}
+}
+
 func TestHasNestedDirs_True(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.Mkdir(filepath.Join(dir, "subdir"), 0o755); err != nil {

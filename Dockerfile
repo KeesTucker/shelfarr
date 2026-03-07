@@ -8,7 +8,7 @@ COPY frontend/ ./
 RUN npm run build
 
 # Stage 2 — Build the Go binary
-FROM golang:1.25.7-alpine AS backend
+FROM golang:1.26.1-alpine AS backend
 
 WORKDIR /build
 
