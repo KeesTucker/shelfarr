@@ -111,7 +111,7 @@ func (h *Handler) cleanupSingle(w http.ResponseWriter, r *http.Request, author, 
 				respond.Error(w, http.StatusInternalServerError, err.Error())
 				return
 			}
-			if e.IsMultiPart && h.absClient != nil && h.absAPIKey != "" {
+			if e.NeedsEncode && h.absClient != nil && h.absAPIKey != "" {
 				ctx := context.WithoutCancel(r.Context())
 				go h.mergeMultiPartEntries(ctx, []BookEntry{e})
 			}
@@ -122,12 +122,11 @@ func (h *Handler) cleanupSingle(w http.ResponseWriter, r *http.Request, author, 
 	respond.Error(w, http.StatusNotFound, "book not found")
 }
 
-// mergeMultiPartEntries triggers ABS merge for every multi-part book in entries.
-// Callers must pass only successfully-cleaned entries. Runs in a background
-// goroutine; errors are logged rather than returned.
+// mergeMultiPartEntries triggers ABS encode-m4b for every book in entries that
+// needs encoding. Runs in a background goroutine; errors are logged rather than returned.
 func (h *Handler) mergeMultiPartEntries(ctx context.Context, entries []BookEntry) {
 	for _, e := range entries {
-		if !e.IsMultiPart {
+		if !e.NeedsEncode {
 			continue
 		}
 		title, author := e.absLookupKeys()

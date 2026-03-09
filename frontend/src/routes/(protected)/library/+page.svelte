@@ -25,6 +25,8 @@
 		metadata_source: 'opf' | 'abs_json' | 'folder';
 		needs_rename: boolean;
 		needs_flat: boolean;
+		needs_encode: boolean;
+		is_multi_part: boolean;
 		expected_author: string;
 		expected_title: string;
 		files: FileInfo;
@@ -36,6 +38,7 @@
 	let loading = $state(true);
 	let error = $state('');
 	let cleaning = $state<Set<string>>(new Set());
+	let submitted = $state<Set<string>>(new Set());
 	let cleaningAll = $state(false);
 	let pruning = $state(false);
 	let toast = $state<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -63,6 +66,7 @@
 		try {
 			const res = await api.post<CleanupResult>('/api/library/cleanup', { author: book.author_folder, title: book.title_folder });
 			showToast(res.errors?.length ? `Cleaned with errors: ${res.errors.join('; ')}` : `"${book.title_folder}" cleaned`, res.errors?.length ? 'error' : 'success');
+			submitted = new Set([...submitted, key]);
 			await load();
 		} catch (e) {
 			showToast(e instanceof Error ? e.message : 'Cleanup failed', 'error');
@@ -87,9 +91,13 @@
 	async function cleanAll() {
 		cleaningAll = true;
 		try {
+			const keys = books
+				.filter((b) => b.needs_rename || b.needs_flat || b.needs_encode)
+				.map((b) => `${b.author_folder}/${b.title_folder}`);
 			const res = await api.post<CleanupResult>('/api/library/cleanup', {});
 			const msg = res.errors?.length ? `Cleaned ${res.cleaned}, ${res.errors.length} error(s): ${res.errors.join('; ')}` : `Cleaned ${res.cleaned} book${res.cleaned !== 1 ? 's' : ''}`;
 			showToast(msg, res.errors?.length ? 'error' : 'success');
+			submitted = new Set([...submitted, ...keys]);
 			await load();
 		} catch (e) {
 			showToast(e instanceof Error ? e.message : 'Cleanup failed', 'error');
@@ -110,7 +118,7 @@
 		return 'folder';
 	}
 
-	const needsCleanupCount = $derived(books.filter((b) => b.needs_rename || b.needs_flat).length);
+	const needsCleanupCount = $derived(books.filter((b) => b.needs_rename || b.needs_flat || b.needs_encode).length);
 </script>
 
 <main class="mx-auto max-w-6xl px-4 py-8">
@@ -178,6 +186,7 @@
 						{#each books as book (`${book.author_folder}/${book.title_folder}`)}
 							{@const key = `${book.author_folder}/${book.title_folder}`}
 							{@const isCleaning = cleaning.has(key)}
+							{@const isSubmitted = submitted.has(key)}
 							<tr class="bg-sepia-50 hover:bg-sepia-100 transition-colors dark:bg-sepia-950 dark:hover:bg-sepia-900">
 								<td class="px-4 py-3">
 									<div class="text-sepia-900 leading-snug dark:text-sepia-100">{book.author_folder}</div>
@@ -224,6 +233,11 @@
 											<AlertTriangle class="w-3.5 h-3.5 shrink-0" />
 											<span class="text-xs">Nested</span>
 										</div>
+									{:else if book.needs_encode}
+										<div class="flex items-center gap-1.5 text-purple-700 dark:text-purple-400">
+											<AlertTriangle class="w-3.5 h-3.5 shrink-0" />
+											<span class="text-xs">Encode</span>
+										</div>
 									{:else}
 										<div class="flex items-center gap-1.5 text-green-700 dark:text-green-400">
 											<CheckCircle2 class="w-3.5 h-3.5 shrink-0" />
@@ -234,9 +248,9 @@
 								<td class="px-2 py-3">
 									<button
 										class="flex items-center gap-1.5 px-2.5 py-1 rounded text-xs text-sepia-500 hover:text-sepia-900 hover:bg-sepia-200 transition-colors disabled:opacity-40 disabled:cursor-not-allowed dark:text-sepia-500 dark:hover:text-sepia-100 dark:hover:bg-sepia-800"
-										disabled={!book.needs_rename && !book.needs_flat || isCleaning}
+										disabled={(!book.needs_rename && !book.needs_flat && !book.needs_encode) || isCleaning || isSubmitted}
 										onclick={() => cleanBook(book)}
-										title="Clean up this book"
+										title={isSubmitted ? 'Encoding queued in ABS' : 'Clean up this book'}
 									>
 										{#if isCleaning}
 											<Loader2 class="w-3 h-3 animate-spin" />

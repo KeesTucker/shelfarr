@@ -47,6 +47,7 @@ type BookEntry struct {
 	NeedsRename    bool           `json:"needs_rename"`
 	NeedsFlat      bool           `json:"needs_flat"`    // true when files are nested in subdirectories
 	IsMultiPart    bool           `json:"is_multi_part"` // true when folder contains more than one audio file
+	NeedsEncode    bool           `json:"needs_encode"`  // true when audio is not already a single M4B
 	ExpectedAuthor string         `json:"expected_author"`
 	ExpectedTitle  string         `json:"expected_title"`
 	Files          FileInfo       `json:"files"`
@@ -99,10 +100,21 @@ func scanBook(path, authorFolder, titleFolder string) BookEntry {
 		NeedsRename:    expectedAuthor != authorFolder || expectedTitle != titleFolder,
 		NeedsFlat:      hasNestedDirs(path),
 		IsMultiPart:    files.AudioCount > 1,
+		NeedsEncode:    needsEncode(files),
 		ExpectedAuthor: expectedAuthor,
 		ExpectedTitle:  expectedTitle,
 		Files:          files,
 	}
+}
+
+// needsEncode reports whether the book's audio should be encoded to a single
+// M4B by ABS. It is true whenever there is at least one audio file that is not
+// already a lone M4B (i.e. any number of non-M4B files, OR multiple M4Bs).
+func needsEncode(files FileInfo) bool {
+	if files.AudioCount == 0 {
+		return false
+	}
+	return !(files.AudioCount == 1 && len(files.Audio) == 1 && files.Audio[0] == "m4b")
 }
 
 // resolveMetadata returns metadata and its source for a book folder.

@@ -208,7 +208,7 @@ func (m *mockABSClient) MergeMultiPart(ctx context.Context, apiKey, itemID strin
 	return nil
 }
 
-func TestHandlerCleanup_SingleTriggersABSMergeForMultiPartBook(t *testing.T) {
+func TestHandlerCleanup_SingleTriggersABSEncodeForMultiPartBook(t *testing.T) {
 	libDir := t.TempDir()
 	titlePath := filepath.Join(libDir, "Author", "Book")
 	if err := os.MkdirAll(titlePath, 0o755); err != nil {
@@ -336,11 +336,10 @@ func TestHandlerCleanup_SingleABSMergeErrorIsLogged(t *testing.T) {
 	}
 }
 
-func TestHandlerCleanup_AllTriggersABSMergeOnlyForMultiPartBooks(t *testing.T) {
+func TestHandlerCleanup_AllTriggersABSEncodeForNonM4BBooks(t *testing.T) {
 	libDir := t.TempDir()
 
-	// Multi-part book with a dirty name (double space) so NeedsRename=true,
-	// which is required for the all-path merge filter to fire.
+	// Multi-part book with a dirty name (double space) — NeedsRename=true and NeedsEncode=true.
 	multiPath := filepath.Join(libDir, "Author A", "Multi  Book")
 	if err := os.MkdirAll(multiPath, 0o755); err != nil {
 		t.Fatal(err)
@@ -351,7 +350,7 @@ func TestHandlerCleanup_AllTriggersABSMergeOnlyForMultiPartBooks(t *testing.T) {
 		}
 	}
 
-	// Single-part book (clean name, should never trigger merge).
+	// Already a single M4B — NeedsEncode=false, should never trigger encode.
 	singlePath := filepath.Join(libDir, "Author B", "Single Book")
 	if err := os.MkdirAll(singlePath, 0o755); err != nil {
 		t.Fatal(err)
@@ -385,14 +384,99 @@ func TestHandlerCleanup_AllTriggersABSMergeOnlyForMultiPartBooks(t *testing.T) {
 		t.Errorf("Cleaned=%d; want 1", resp.Cleaned)
 	}
 
-	// Wait for the background merge goroutine.
+	// Wait for the background encode goroutine.
 	select {
 	case <-done:
 	case <-time.After(5 * time.Second):
-		t.Fatal("timed out waiting for background ABS merge")
+		t.Fatal("timed out waiting for background ABS encode")
 	}
 	if len(mock.mergeCalls) != 1 {
-		t.Errorf("merge calls: %v; want exactly 1", mock.mergeCalls)
+		t.Errorf("encode calls: %v; want exactly 1", mock.mergeCalls)
+	}
+}
+
+func TestHandlerCleanup_SingleTriggersABSEncodeForSingleMP3(t *testing.T) {
+	libDir := t.TempDir()
+	titlePath := filepath.Join(libDir, "Author", "Book")
+	if err := os.MkdirAll(titlePath, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(titlePath, "book.mp3"), []byte("audio"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	encoded := make(chan string, 1)
+	mock := &mockABSClient{
+		findItemFn: func(_ context.Context, _, _, _ string) (string, error) { return "li_single", nil },
+		mergePartFn: func(_ context.Context, _, itemID string) error {
+			encoded <- itemID
+			return nil
+		},
+	}
+	h := NewHandler(libDir)
+	h.SetABSClient(mock, "test-key")
+
+	body := `{"author":"Author","title":"Book"}`
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/library/cleanup", strings.NewReader(body))
+	req.ContentLength = int64(len(body))
+	rr := httptest.NewRecorder()
+	h.Cleanup(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	select {
+	case itemID := <-encoded:
+		if itemID != "li_single" {
+			t.Errorf("encode called with %q; want li_single", itemID)
+		}
+	case <-time.After(2 * time.Second):
+		t.Error("timed out waiting for async ABS encode")
+	}
+}
+
+func TestHandlerCleanup_AllTriggersABSEncodeForEncodeOnlyBook(t *testing.T) {
+	libDir := t.TempDir()
+
+	// Book with clean name but non-M4B audio — NeedsRename=false, NeedsEncode=true.
+	titlePath := filepath.Join(libDir, "Frank Herbert", "Dune")
+	if err := os.MkdirAll(titlePath, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(titlePath, "Dune.mp3"), []byte("audio"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	encoded := make(chan string, 1)
+	mock := &mockABSClient{
+		findItemFn:  func(_ context.Context, _, _, _ string) (string, error) { return "li_dune", nil },
+		mergePartFn: func(_ context.Context, _, itemID string) error { encoded <- itemID; return nil },
+	}
+	h := NewHandler(libDir)
+	h.SetABSClient(mock, "test-key")
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/library/cleanup", nil)
+	rr := httptest.NewRecorder()
+	h.Cleanup(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	var resp cleanupResponse
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatal(err)
+	}
+	// No rename/flatten was needed — Cleaned=0.
+	if resp.Cleaned != 0 {
+		t.Errorf("Cleaned=%d; want 0 (no file work needed)", resp.Cleaned)
+	}
+	select {
+	case itemID := <-encoded:
+		if itemID != "li_dune" {
+			t.Errorf("encode called with %q; want li_dune", itemID)
+		}
+	case <-time.After(2 * time.Second):
+		t.Error("timed out waiting for async ABS encode")
 	}
 }
 
