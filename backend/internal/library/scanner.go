@@ -114,7 +114,7 @@ func needsEncode(files FileInfo) bool {
 	if files.AudioCount == 0 {
 		return false
 	}
-	return !(files.AudioCount == 1 && len(files.Audio) == 1 && files.Audio[0] == "m4b")
+	return files.AudioCount != 1 || len(files.Audio) != 1 || files.Audio[0] != "m4b"
 }
 
 // resolveMetadata returns metadata and its source for a book folder.
