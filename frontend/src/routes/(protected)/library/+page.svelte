@@ -97,7 +97,9 @@
 			const res = await api.post<CleanupResult>('/api/library/cleanup', {});
 			const msg = res.errors?.length ? `Cleaned ${res.cleaned}, ${res.errors.length} error(s): ${res.errors.join('; ')}` : `Cleaned ${res.cleaned} book${res.cleaned !== 1 ? 's' : ''}`;
 			showToast(msg, res.errors?.length ? 'error' : 'success');
-			submitted = new Set([...submitted, ...keys]);
+			const errorKeys = new Set((res.errors ?? []).map((e: string) => e.split(':')[0].trim()));
+			const successKeys = keys.filter((k) => !errorKeys.has(k));
+			submitted = new Set([...submitted, ...successKeys]);
 			await load();
 		} catch (e) {
 			showToast(e instanceof Error ? e.message : 'Cleanup failed', 'error');
