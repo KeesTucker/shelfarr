@@ -360,6 +360,74 @@ func TestCollectFiles_AudioCount(t *testing.T) {
 	}
 }
 
+// ── NeedsEncode ───────────────────────────────────────────────────────────────
+
+func TestNeedsEncode_SingleM4B(t *testing.T) {
+	if needsEncode(FileInfo{AudioCount: 1, Audio: []string{"m4b"}}) {
+		t.Error("single M4B should not need encoding")
+	}
+}
+
+func TestNeedsEncode_SingleMP3(t *testing.T) {
+	if !needsEncode(FileInfo{AudioCount: 1, Audio: []string{"mp3"}}) {
+		t.Error("single MP3 should need encoding")
+	}
+}
+
+func TestNeedsEncode_MultipleM4Bs(t *testing.T) {
+	if !needsEncode(FileInfo{AudioCount: 2, Audio: []string{"m4b"}}) {
+		t.Error("multiple M4Bs should need encoding (merge into one)")
+	}
+}
+
+func TestNeedsEncode_MultipleMP3s(t *testing.T) {
+	if !needsEncode(FileInfo{AudioCount: 2, Audio: []string{"mp3"}}) {
+		t.Error("multiple MP3s should need encoding")
+	}
+}
+
+func TestNeedsEncode_NoAudio(t *testing.T) {
+	if needsEncode(FileInfo{AudioCount: 0}) {
+		t.Error("no audio files should not need encoding")
+	}
+}
+
+func TestScanBook_NeedsEncodeFalseForSingleM4B(t *testing.T) {
+	libDir := t.TempDir()
+	titlePath := filepath.Join(libDir, "Author", "Book")
+	if err := os.MkdirAll(titlePath, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(titlePath, "book.m4b"), []byte("audio"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	entries, err := ScanLibrary(libDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if entries[0].NeedsEncode {
+		t.Error("NeedsEncode should be false for a single M4B file")
+	}
+}
+
+func TestScanBook_NeedsEncodeTrueForSingleMP3(t *testing.T) {
+	libDir := t.TempDir()
+	titlePath := filepath.Join(libDir, "Author", "Book")
+	if err := os.MkdirAll(titlePath, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(titlePath, "book.mp3"), []byte("audio"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	entries, err := ScanLibrary(libDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !entries[0].NeedsEncode {
+		t.Error("NeedsEncode should be true for a single non-M4B audio file")
+	}
+}
+
 func TestHasNestedDirs_True(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.Mkdir(filepath.Join(dir, "subdir"), 0o755); err != nil {

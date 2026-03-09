@@ -128,11 +128,11 @@ func (c *Client) searchLibraryItems(ctx context.Context, apiKey, libraryID, titl
 	return "", nil
 }
 
-// MergeMultiPart calls the ABS merge-multipart tool for the given library item
-// ID. ABS processes the merge asynchronously; this returns once the job is queued.
+// MergeMultiPart calls the ABS encode-m4b tool for the given library item
+// ID. ABS processes the encode asynchronously; this returns once the job is queued.
 func (c *Client) MergeMultiPart(ctx context.Context, apiKey, itemID string) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
-		c.baseURL+"/api/tools/item/"+url.PathEscape(itemID)+"/merge-multipart", nil)
+		c.baseURL+"/api/tools/item/"+url.PathEscape(itemID)+"/encode-m4b", nil)
 	if err != nil {
 		return fmt.Errorf("abs: build merge request: %w", err)
 	}

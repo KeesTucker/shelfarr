@@ -107,27 +107,31 @@ func (h *Handler) cleanupSingle(w http.ResponseWriter, r *http.Request, author, 
 
 	for _, e := range entries {
 		if e.AuthorFolder == author && e.TitleFolder == title {
-			if err := CleanupBook(h.libraryDir, e); err != nil {
-				respond.Error(w, http.StatusInternalServerError, err.Error())
-				return
+			needsFileWork := e.NeedsRename || e.NeedsFlat
+			cleaned := 0
+			if needsFileWork {
+				if err := CleanupBook(h.libraryDir, e); err != nil {
+					respond.Error(w, http.StatusInternalServerError, err.Error())
+					return
+				}
+				cleaned = 1
 			}
-			if e.IsMultiPart && h.absClient != nil && h.absAPIKey != "" {
+			if e.NeedsEncode && h.absClient != nil && h.absAPIKey != "" {
 				ctx := context.WithoutCancel(r.Context())
 				go h.mergeMultiPartEntries(ctx, []BookEntry{e})
 			}
-			respond.JSON(w, http.StatusOK, cleanupResponse{Cleaned: 1, Errors: nil})
+			respond.JSON(w, http.StatusOK, cleanupResponse{Cleaned: cleaned, Errors: nil})
 			return
 		}
 	}
 	respond.Error(w, http.StatusNotFound, "book not found")
 }
 
-// mergeMultiPartEntries triggers ABS merge for every multi-part book in entries.
-// Callers must pass only successfully-cleaned entries. Runs in a background
-// goroutine; errors are logged rather than returned.
+// mergeMultiPartEntries triggers ABS encode-m4b for every book in entries that
+// needs encoding. Runs in a background goroutine; errors are logged rather than returned.
 func (h *Handler) mergeMultiPartEntries(ctx context.Context, entries []BookEntry) {
 	for _, e := range entries {
-		if !e.IsMultiPart {
+		if !e.NeedsEncode {
 			continue
 		}
 		title, author := e.absLookupKeys()

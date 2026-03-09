@@ -229,6 +229,53 @@ func TestCleanupBook_RenamesSingleAudioFile(t *testing.T) {
 	}
 }
 
+func TestCleanupAll_EncodeOnlyIncludedButNotCounted(t *testing.T) {
+	libDir := t.TempDir()
+	titlePath := filepath.Join(libDir, "Frank Herbert", "Dune")
+	if err := os.MkdirAll(titlePath, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Single MP3 with clean name — NeedsEncode=true, NeedsRename=false, NeedsFlat=false.
+	if err := os.WriteFile(filepath.Join(titlePath, "Dune.mp3"), []byte("audio"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	entries, cleaned, errs := CleanupAll(libDir)
+	if len(errs) != 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+	if cleaned != 0 {
+		t.Errorf("Cleaned=%d; want 0 (no rename/flatten needed)", cleaned)
+	}
+	if len(entries) != 1 {
+		t.Errorf("expected 1 actionable entry for encode-only book, got %d", len(entries))
+	}
+	if len(entries) > 0 && !entries[0].NeedsEncode {
+		t.Error("returned entry should have NeedsEncode=true")
+	}
+}
+
+func TestCleanupAll_SingleM4BSkipped(t *testing.T) {
+	libDir := t.TempDir()
+	titlePath := filepath.Join(libDir, "Frank Herbert", "Dune")
+	if err := os.MkdirAll(titlePath, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Already a single M4B — nothing to do.
+	if err := os.WriteFile(filepath.Join(titlePath, "Dune.m4b"), []byte("audio"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	entries, cleaned, errs := CleanupAll(libDir)
+	if len(errs) != 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+	if cleaned != 0 {
+		t.Errorf("Cleaned=%d; want 0", cleaned)
+	}
+	if len(entries) != 0 {
+		t.Errorf("expected 0 actionable entries for single-M4B book, got %d", len(entries))
+	}
+}
+
 func TestFlattenBookDir_FlattensSubdirs(t *testing.T) {
 	dir := t.TempDir()
 	titleDir := filepath.Join(dir, "The Book")
