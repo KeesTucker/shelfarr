@@ -53,8 +53,8 @@
 		loading = true; error = '';
 		try {
 			books = await api.get<BookEntry[]>('/api/library');
-			const currentKeys = new Set(books.map((b) => `${b.author_folder}/${b.title_folder}`));
-			submitted = new Set([...submitted].filter((k) => currentKeys.has(k)));
+			const encodeNeeded = new Set(books.filter((b) => b.needs_encode).map((b) => `${b.author_folder}/${b.title_folder}`));
+			submitted = new Set([...submitted].filter((k) => encodeNeeded.has(k)));
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to load library';
 		} finally {
@@ -68,7 +68,9 @@
 		try {
 			const res = await api.post<CleanupResult>('/api/library/cleanup', { author: book.author_folder, title: book.title_folder });
 			showToast(res.errors?.length ? `Cleaned with errors: ${res.errors.join('; ')}` : `"${book.title_folder}" cleaned`, res.errors?.length ? 'error' : 'success');
-			submitted = new Set([...submitted, key]);
+			if (book.needs_encode) {
+				submitted = new Set([...submitted, key]);
+			}
 			await load();
 		} catch (e) {
 			showToast(e instanceof Error ? e.message : 'Cleanup failed', 'error');
