@@ -67,7 +67,8 @@
 		cleaning = new Set([...cleaning, key]);
 		try {
 			const res = await api.post<CleanupResult>('/api/library/cleanup', { author: book.author_folder, title: book.title_folder });
-			showToast(res.errors?.length ? `Cleaned with errors: ${res.errors.join('; ')}` : `"${book.title_folder}" cleaned`, res.errors?.length ? 'error' : 'success');
+			const label = res.cleaned > 0 ? `"${book.title_folder}" cleaned` : book.needs_encode ? `"${book.title_folder}" queued for encoding` : `"${book.title_folder}" cleaned`;
+			showToast(res.errors?.length ? `Cleaned with errors: ${res.errors.join('; ')}` : label, res.errors?.length ? 'error' : 'success');
 			if (book.needs_encode) {
 				submitted = new Set([...submitted, key]);
 			}
@@ -95,17 +96,24 @@
 	async function cleanAll() {
 		cleaningAll = true;
 		try {
-			const keys = books
-				.filter((b) => b.needs_rename || b.needs_flat || b.needs_encode)
-				.map((b) => `${b.author_folder}/${b.title_folder}`);
+			const booksMap = new Map(books.map((b) => [`${b.author_folder}/${b.title_folder}`, b]));
+			const keys = [...booksMap.keys()].filter((k) => {
+				const b = booksMap.get(k)!;
+				return b.needs_rename || b.needs_flat || b.needs_encode;
+			});
 			const res = await api.post<CleanupResult>('/api/library/cleanup', {});
-			const msg = res.errors?.length ? `Cleaned ${res.cleaned}, ${res.errors.length} error(s): ${res.errors.join('; ')}` : `Cleaned ${res.cleaned} book${res.cleaned !== 1 ? 's' : ''}`;
-			showToast(msg, res.errors?.length ? 'error' : 'success');
 			const errorKeys = new Set((res.errors ?? []).map((e: string) => {
 				const idx = e.indexOf(': ');
-				return idx >= 0 ? e.slice(0, idx) : e;
+				return idx >= 0 ? e.slice(0, idx) : '\x00';
 			}));
 			const successKeys = keys.filter((k) => !errorKeys.has(k));
+			const encodeQueued = successKeys.filter((k) => booksMap.get(k)?.needs_encode).length;
+			const parts: string[] = [];
+			if (res.cleaned > 0) parts.push(`Cleaned ${res.cleaned} book${res.cleaned !== 1 ? 's' : ''}`);
+			if (encodeQueued > 0) parts.push(`${encodeQueued} queued for encoding`);
+			const msg = parts.length > 0 ? parts.join(', ') : 'Nothing to clean';
+			const hasErrors = (res.errors?.length ?? 0) > 0;
+			showToast(hasErrors ? `${msg} — ${res.errors!.length} error(s): ${res.errors!.join('; ')}` : msg, hasErrors ? 'error' : 'success');
 			submitted = new Set([...submitted, ...successKeys]);
 			await load();
 		} catch (e) {
@@ -128,6 +136,7 @@
 	}
 
 	const needsCleanupCount = $derived(books.filter((b) => b.needs_rename || b.needs_flat || b.needs_encode).length);
+	const unsubmittedActionable = $derived(books.filter((b) => (b.needs_rename || b.needs_flat || b.needs_encode) && !submitted.has(`${b.author_folder}/${b.title_folder}`)).length);
 </script>
 
 <main class="mx-auto max-w-6xl px-4 py-8">
@@ -154,12 +163,12 @@
 					<Trash2 class="w-4 h-4 mr-2" />Prune empty dirs
 				{/if}
 			</Button>
-			{#if needsCleanupCount > 0}
+			{#if unsubmittedActionable > 0}
 				<Button onclick={cleanAll} disabled={cleaningAll}>
 					{#if cleaningAll}
 						<Loader2 class="w-4 h-4 mr-2 animate-spin" />Cleaning…
 					{:else}
-						<Wand2 class="w-4 h-4 mr-2" />Clean all ({needsCleanupCount})
+						<Wand2 class="w-4 h-4 mr-2" />Clean all ({unsubmittedActionable})
 					{/if}
 				</Button>
 			{/if}
