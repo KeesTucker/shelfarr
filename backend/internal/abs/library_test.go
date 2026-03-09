@@ -249,7 +249,7 @@ func TestFindLibraryItemByTitleAuthor_LibrariesHTTPError(t *testing.T) {
 func TestMergeMultiPart_Success(t *testing.T) {
 	var gotItemID string
 	mux := http.NewServeMux()
-	mux.HandleFunc("POST /api/tools/item/{id}/merge-multipart", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST /api/tools/item/{id}/encode-m4b", func(w http.ResponseWriter, r *http.Request) {
 		gotItemID = r.PathValue("id")
 		if r.Header.Get("Authorization") != "Bearer test-key" {
 			w.WriteHeader(http.StatusUnauthorized)
@@ -270,7 +270,7 @@ func TestMergeMultiPart_Success(t *testing.T) {
 
 func TestMergeMultiPart_HTTPError(t *testing.T) {
 	mux := http.NewServeMux()
-	mux.HandleFunc("POST /api/tools/item/{id}/merge-multipart", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("POST /api/tools/item/{id}/encode-m4b", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 	})
 
@@ -284,7 +284,7 @@ func TestMergeMultiPart_HTTPError(t *testing.T) {
 func TestMergeMultiPart_SendsAuthHeader(t *testing.T) {
 	var gotAuth string
 	mux := http.NewServeMux()
-	mux.HandleFunc("POST /api/tools/item/{id}/merge-multipart", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST /api/tools/item/{id}/encode-m4b", func(w http.ResponseWriter, r *http.Request) {
 		gotAuth = r.Header.Get("Authorization")
 		w.WriteHeader(http.StatusOK)
 	})
