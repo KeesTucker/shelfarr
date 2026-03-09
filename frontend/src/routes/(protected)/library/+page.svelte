@@ -103,7 +103,7 @@
 			showToast(msg, res.errors?.length ? 'error' : 'success');
 			const errorKeys = new Set((res.errors ?? []).map((e: string) => {
 				const idx = e.indexOf(': ');
-				return idx >= 0 ? e.slice(0, idx) : e;
+				return idx >= 0 ? e.slice(0, idx) : '\x00';
 			}));
 			const successKeys = keys.filter((k) => !errorKeys.has(k));
 			submitted = new Set([...submitted, ...successKeys]);
@@ -128,6 +128,7 @@
 	}
 
 	const needsCleanupCount = $derived(books.filter((b) => b.needs_rename || b.needs_flat || b.needs_encode).length);
+	const unsubmittedActionable = $derived(books.filter((b) => (b.needs_rename || b.needs_flat || b.needs_encode) && !submitted.has(`${b.author_folder}/${b.title_folder}`)).length);
 </script>
 
 <main class="mx-auto max-w-6xl px-4 py-8">
@@ -154,12 +155,12 @@
 					<Trash2 class="w-4 h-4 mr-2" />Prune empty dirs
 				{/if}
 			</Button>
-			{#if needsCleanupCount > 0}
+			{#if unsubmittedActionable > 0}
 				<Button onclick={cleanAll} disabled={cleaningAll}>
 					{#if cleaningAll}
 						<Loader2 class="w-4 h-4 mr-2 animate-spin" />Cleaning…
 					{:else}
-						<Wand2 class="w-4 h-4 mr-2" />Clean all ({needsCleanupCount})
+						<Wand2 class="w-4 h-4 mr-2" />Clean all ({unsubmittedActionable})
 					{/if}
 				</Button>
 			{/if}
