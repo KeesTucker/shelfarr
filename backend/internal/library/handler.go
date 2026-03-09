@@ -107,15 +107,20 @@ func (h *Handler) cleanupSingle(w http.ResponseWriter, r *http.Request, author, 
 
 	for _, e := range entries {
 		if e.AuthorFolder == author && e.TitleFolder == title {
-			if err := CleanupBook(h.libraryDir, e); err != nil {
-				respond.Error(w, http.StatusInternalServerError, err.Error())
-				return
+			needsFileWork := e.NeedsRename || e.NeedsFlat
+			cleaned := 0
+			if needsFileWork {
+				if err := CleanupBook(h.libraryDir, e); err != nil {
+					respond.Error(w, http.StatusInternalServerError, err.Error())
+					return
+				}
+				cleaned = 1
 			}
 			if e.NeedsEncode && h.absClient != nil && h.absAPIKey != "" {
 				ctx := context.WithoutCancel(r.Context())
 				go h.mergeMultiPartEntries(ctx, []BookEntry{e})
 			}
-			respond.JSON(w, http.StatusOK, cleanupResponse{Cleaned: 1, Errors: nil})
+			respond.JSON(w, http.StatusOK, cleanupResponse{Cleaned: cleaned, Errors: nil})
 			return
 		}
 	}

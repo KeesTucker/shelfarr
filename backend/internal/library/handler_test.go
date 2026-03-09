@@ -244,8 +244,8 @@ func TestHandlerCleanup_SingleTriggersABSEncodeForMultiPartBook(t *testing.T) {
 	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
 		t.Fatal(err)
 	}
-	if resp.Cleaned != 1 {
-		t.Errorf("Cleaned=%d; want 1", resp.Cleaned)
+	if resp.Cleaned != 0 {
+		t.Errorf("Cleaned=%d; want 0 (encode-only, no rename/flatten)", resp.Cleaned)
 	}
 	// ABS merge is async; wait for it with a timeout.
 	select {
@@ -322,8 +322,8 @@ func TestHandlerCleanup_SingleABSMergeErrorIsLogged(t *testing.T) {
 	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
 		t.Fatal(err)
 	}
-	if resp.Cleaned != 1 {
-		t.Errorf("Cleaned=%d; want 1", resp.Cleaned)
+	if resp.Cleaned != 0 {
+		t.Errorf("Cleaned=%d; want 0 (encode-only, no rename/flatten)", resp.Cleaned)
 	}
 	if len(resp.Errors) != 0 {
 		t.Errorf("unexpected response errors: %v", resp.Errors)
@@ -507,8 +507,8 @@ func TestHandlerCleanup_SingleNoABSMergeWhenClientNotConfigured(t *testing.T) {
 	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
 		t.Fatal(err)
 	}
-	if resp.Cleaned != 1 {
-		t.Errorf("Cleaned=%d; want 1", resp.Cleaned)
+	if resp.Cleaned != 0 {
+		t.Errorf("Cleaned=%d; want 0 (encode-only, no rename/flatten)", resp.Cleaned)
 	}
 }
 
