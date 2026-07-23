@@ -145,7 +145,7 @@ func (h *Handler) loginLocal(w http.ResponseWriter, r *http.Request, req loginRe
 //
 //	POST /api/auth/logout
 func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
-	http.SetCookie(w, &http.Cookie{
+	http.SetCookie(w, &http.Cookie{ // #nosec G124 -- Secure defaults true; only false via COOKIE_INSECURE for local dev over plain HTTP
 		Name:     authCookieName,
 		Value:    "",
 		HttpOnly: true,
@@ -158,7 +158,7 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) setAuthCookie(w http.ResponseWriter, token string) {
-	http.SetCookie(w, &http.Cookie{
+	http.SetCookie(w, &http.Cookie{ // #nosec G124 -- Secure defaults true; only false via COOKIE_INSECURE for local dev over plain HTTP
 		Name:     authCookieName,
 		Value:    token,
 		HttpOnly: true,
