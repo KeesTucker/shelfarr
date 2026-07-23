@@ -220,7 +220,19 @@ func run() error {
 func buildRouter(database *db.DB, tokenCfg auth.TokenConfig, absClient *abs.Client, prowlarrClient *prowlarr.Client, requestsHandler *requests.Handler, metaHandler *metadata.Handler, libraryHandler *library.Handler, staticDir string) http.Handler {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
-	r.Use(middleware.RealIP)
+	// Assumes exactly one reverse proxy in front of shelfarr (the common
+	// self-hosted deployment). Bridges the trusted client IP into RemoteAddr
+	// purely so the access log below shows it; nothing security-sensitive
+	// reads RemoteAddr.
+	r.Use(middleware.ClientIPFromXFF())
+	r.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if ip := middleware.GetClientIP(r.Context()); ip != "" {
+				r.RemoteAddr = ip
+			}
+			next.ServeHTTP(w, r)
+		})
+	})
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 
