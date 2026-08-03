@@ -24,7 +24,7 @@
     "svelte-check": "^4.7.3",
     "tailwindcss": "^4.2.1",
     "typescript": "~5.9.3",
-    "vite": "^8.1.5"
+    "vite": "^8.2.0"
   },
   "dependencies": {
     "@fontsource/eb-garamond": "^5.2.7",
