@@ -118,6 +118,51 @@ func TestAddTorrentMagnet(t *testing.T) {
 	}
 }
 
+// fakeQBitProxy simulates a seedbox multi-tenant reverse proxy in front of
+// qBittorrent that replies 204 No Content with an empty body on success
+// (rather than qBittorrent's own 200 "Ok.") and namespaces its session
+// cookie (e.g. "QBT_SID_13754" instead of "SID").
+func fakeQBitProxy(t *testing.T) *httptest.Server {
+	t.Helper()
+	const cookieName = "QBT_SID_13754"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v2/auth/login" {
+			if _, err := r.Cookie(cookieName); err != nil {
+				http.Error(w, "Forbidden", http.StatusForbidden)
+				return
+			}
+		}
+		switch r.URL.Path {
+		case "/api/v2/auth/login":
+			http.SetCookie(w, &http.Cookie{Name: cookieName, Value: "test-sid"})
+			w.WriteHeader(http.StatusNoContent)
+		case "/api/v2/torrents/add":
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+func TestAddTorrentMagnetThroughProxyStyleResponse(t *testing.T) {
+	const (
+		magnet       = "magnet:?xt=urn:btih:aabbccddeeff00112233445566778899aabbccdd&dn=TestBook"
+		expectedHash = "aabbccddeeff00112233445566778899aabbccdd"
+	)
+	srv := fakeQBitProxy(t)
+
+	c := New(srv.URL, "admin", "pass")
+	hash, err := c.AddTorrent(context.Background(), magnet, "/downloads", "")
+	if err != nil {
+		t.Fatalf("AddTorrent: %v", err)
+	}
+	if hash != expectedHash {
+		t.Errorf("hash=%q want %q", hash, expectedHash)
+	}
+}
+
 func TestAddTorrentQBitDown(t *testing.T) {
 	c := New("http://127.0.0.1:1", "admin", "pass")
 	_, err := c.AddTorrent(context.Background(),
