@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 // ── parseMagnetHash ───────────────────────────────────────────────────────────
@@ -160,6 +161,54 @@ func TestAddTorrentMagnetThroughProxyStyleResponse(t *testing.T) {
 	}
 	if hash != expectedHash {
 		t.Errorf("hash=%q want %q", hash, expectedHash)
+	}
+}
+
+// TestAddTorrentHTTPURLThroughNewQBitJSONResponse simulates newer qBittorrent
+// versions, which reply to torrents/add with a JSON summary object instead of
+// the legacy plain-text "Ok." — exercised via the HTTP-URL (multipart
+// upload) path, matching what actually broke against a real seedbox.
+func TestAddTorrentHTTPURLThroughNewQBitJSONResponse(t *testing.T) {
+	const wantHash = "dfd6a82b3677f176842497def9e99d45356ac2b7"
+	var addedOn atomic.Int64
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/torrent-file" {
+			// Our backend fetches the .torrent bytes itself (e.g. via a
+			// Prowlarr proxy URL) before uploading them to qBit.
+			_, _ = w.Write([]byte("fake torrent bytes"))
+			return
+		}
+		if r.URL.Path != "/api/v2/auth/login" {
+			if _, err := r.Cookie("SID"); err != nil {
+				http.Error(w, "Forbidden", http.StatusForbidden)
+				return
+			}
+		}
+		switch r.URL.Path {
+		case "/api/v2/auth/login":
+			http.SetCookie(w, &http.Cookie{Name: "SID", Value: "test-sid"})
+			fmt.Fprint(w, "Ok.")
+		case "/api/v2/torrents/add":
+			addedOn.Store(time.Now().Unix())
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprintf(w, `{"added_torrent_ids":["%s"],"failure_count":0,"pending_count":0,"success_count":1}`, wantHash)
+		case "/api/v2/torrents/info":
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode([]TorrentInfo{{Hash: wantHash, Name: "Test", AddedOn: addedOn.Load()}})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	c := New(srv.URL, "admin", "pass")
+	hash, err := c.AddTorrent(context.Background(), srv.URL+"/torrent-file", "/downloads", "")
+	if err != nil {
+		t.Fatalf("AddTorrent: %v", err)
+	}
+	if hash != wantHash {
+		t.Errorf("hash=%q want %q", hash, wantHash)
 	}
 }
 

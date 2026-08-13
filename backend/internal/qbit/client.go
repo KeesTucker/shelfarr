@@ -260,18 +260,47 @@ func (c *Client) RemoveTorrent(ctx context.Context, hash string) error {
 
 // ── internal helpers ──────────────────────────────────────────────────────────
 
-// qbitOK reports whether a response from qBittorrent's login or torrents/add
-// endpoints indicates success. Stock qBittorrent replies 200 with body "Ok.".
-// Some seedbox multi-tenant reverse proxies in front of qBittorrent (e.g.
-// seedhost) instead reply 204 No Content with an empty body — accept that
-// shape too rather than treating it as an authentication failure.
-func qbitOK(statusCode int, body []byte) bool {
+// loginOK reports whether a qBittorrent login response indicates success.
+// Stock qBittorrent replies 200 with body "Ok.". Some seedbox multi-tenant
+// reverse proxies in front of qBittorrent (e.g. seedhost) instead reply 204
+// No Content with an empty body — accept that shape too rather than treating
+// it as an authentication failure.
+func loginOK(statusCode int, body []byte) bool {
 	trimmed := strings.TrimSpace(string(body))
 	switch {
 	case statusCode == http.StatusOK && trimmed == "Ok.":
 		return true
 	case statusCode == http.StatusNoContent && trimmed == "":
 		return true
+	default:
+		return false
+	}
+}
+
+// addTorrentResponse is the JSON body newer qBittorrent versions return from
+// torrents/add on success, replacing the legacy plain-text "Ok." response.
+type addTorrentResponse struct {
+	AddedTorrentIDs []string `json:"added_torrent_ids"`
+	SuccessCount    int      `json:"success_count"`
+}
+
+// addTorrentOK reports whether a torrents/add response indicates success.
+// Accepts qBittorrent's legacy "200 Ok." response, some seedbox reverse
+// proxies' "204 No Content" response, and newer qBittorrent's JSON response
+// (`{"added_torrent_ids":[...],"success_count":N,...}`).
+func addTorrentOK(statusCode int, body []byte) bool {
+	trimmed := strings.TrimSpace(string(body))
+	switch {
+	case statusCode == http.StatusOK && trimmed == "Ok.":
+		return true
+	case statusCode == http.StatusNoContent && trimmed == "":
+		return true
+	case statusCode == http.StatusOK:
+		var parsed addTorrentResponse
+		if err := json.Unmarshal(body, &parsed); err != nil {
+			return false
+		}
+		return parsed.SuccessCount > 0 || len(parsed.AddedTorrentIDs) > 0
 	default:
 		return false
 	}
@@ -307,7 +336,7 @@ func (c *Client) postTorrent(ctx context.Context, downloadURL, savePath, categor
 	defer func() { _ = resp.Body.Close() }()
 
 	body, _ := io.ReadAll(resp.Body)
-	if !qbitOK(resp.StatusCode, body) {
+	if !addTorrentOK(resp.StatusCode, body) {
 		return fmt.Errorf("qbit add torrent: unexpected response %d %q", resp.StatusCode, string(body))
 	}
 	return nil
@@ -382,7 +411,7 @@ func (c *Client) fetchAndPostTorrent(ctx context.Context, downloadURL, savePath,
 	}
 	defer func() { _ = addResp.Body.Close() }()
 	body, _ := io.ReadAll(addResp.Body)
-	if !qbitOK(addResp.StatusCode, body) {
+	if !addTorrentOK(addResp.StatusCode, body) {
 		return fmt.Errorf("qbit upload torrent: unexpected response %d %q", addResp.StatusCode, string(body))
 	}
 	return nil
@@ -507,7 +536,7 @@ func (c *Client) login(ctx context.Context) error {
 	defer func() { _ = resp.Body.Close() }()
 
 	body, _ := io.ReadAll(resp.Body)
-	if !qbitOK(resp.StatusCode, body) {
+	if !loginOK(resp.StatusCode, body) {
 		return fmt.Errorf("qbit login: authentication failed (check credentials), got %d %q", resp.StatusCode, string(body))
 	}
 
