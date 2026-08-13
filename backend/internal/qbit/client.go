@@ -260,6 +260,23 @@ func (c *Client) RemoveTorrent(ctx context.Context, hash string) error {
 
 // ── internal helpers ──────────────────────────────────────────────────────────
 
+// qbitOK reports whether a response from qBittorrent's login or torrents/add
+// endpoints indicates success. Stock qBittorrent replies 200 with body "Ok.".
+// Some seedbox multi-tenant reverse proxies in front of qBittorrent (e.g.
+// seedhost) instead reply 204 No Content with an empty body — accept that
+// shape too rather than treating it as an authentication failure.
+func qbitOK(statusCode int, body []byte) bool {
+	trimmed := strings.TrimSpace(string(body))
+	switch {
+	case statusCode == http.StatusOK && trimmed == "Ok.":
+		return true
+	case statusCode == http.StatusNoContent && trimmed == "":
+		return true
+	default:
+		return false
+	}
+}
+
 // postTorrent POSTs a magnet URI to qBittorrent's add endpoint.
 func (c *Client) postTorrent(ctx context.Context, downloadURL, savePath, category string) error {
 	makeReq := func() (*http.Request, error) {
@@ -290,7 +307,7 @@ func (c *Client) postTorrent(ctx context.Context, downloadURL, savePath, categor
 	defer func() { _ = resp.Body.Close() }()
 
 	body, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode != http.StatusOK || strings.TrimSpace(string(body)) != "Ok." {
+	if !qbitOK(resp.StatusCode, body) {
 		return fmt.Errorf("qbit add torrent: unexpected response %d %q", resp.StatusCode, string(body))
 	}
 	return nil
@@ -365,7 +382,7 @@ func (c *Client) fetchAndPostTorrent(ctx context.Context, downloadURL, savePath,
 	}
 	defer func() { _ = addResp.Body.Close() }()
 	body, _ := io.ReadAll(addResp.Body)
-	if addResp.StatusCode != http.StatusOK || strings.TrimSpace(string(body)) != "Ok." {
+	if !qbitOK(addResp.StatusCode, body) {
 		return fmt.Errorf("qbit upload torrent: unexpected response %d %q", addResp.StatusCode, string(body))
 	}
 	return nil
@@ -469,7 +486,7 @@ func (c *Client) ensureLoggedIn(ctx context.Context) error {
 	return c.login(ctx)
 }
 
-// login authenticates with qBittorrent and stores the SID session cookie.
+// login authenticates with qBittorrent and stores the session cookie.
 func (c *Client) login(ctx context.Context) error {
 	form := url.Values{}
 	form.Set("username", c.username)
@@ -490,13 +507,16 @@ func (c *Client) login(ctx context.Context) error {
 	defer func() { _ = resp.Body.Close() }()
 
 	body, _ := io.ReadAll(resp.Body)
-	if strings.TrimSpace(string(body)) != "Ok." {
-		return fmt.Errorf("qbit login: authentication failed (check credentials), got %q", string(body))
+	if !qbitOK(resp.StatusCode, body) {
+		return fmt.Errorf("qbit login: authentication failed (check credentials), got %d %q", resp.StatusCode, string(body))
 	}
 
 	c.mu.Lock()
 	for _, ck := range resp.Cookies() {
-		if ck.Name == "SID" {
+		// Stock qBittorrent names its session cookie "SID". Some seedbox
+		// multi-tenant reverse proxies (e.g. seedhost) namespace it instead,
+		// e.g. "QBT_SID_13754" — match loosely so those still work.
+		if strings.Contains(strings.ToUpper(ck.Name), "SID") {
 			c.cookie = ck
 			break
 		}
