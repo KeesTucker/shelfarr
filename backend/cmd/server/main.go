@@ -224,7 +224,7 @@ func buildRouter(database *db.DB, tokenCfg auth.TokenConfig, absClient *abs.Clie
 	// self-hosted deployment). Bridges the trusted client IP into RemoteAddr
 	// purely so the access log below shows it; nothing security-sensitive
 	// reads RemoteAddr.
-	r.Use(middleware.ClientIPFromXFF())
+	r.Use(middleware.ClientIPFromXFFTrustedProxies(1))
 	r.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if ip := middleware.GetClientIP(r.Context()); ip != "" {
