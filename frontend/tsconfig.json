@@ -1,5 +1,5 @@
 {
-	"extends": "./.svelte-kit/tsconfig.json",
+	"extends": "$app/tsconfig",
 	"compilerOptions": {
 		"allowJs": true,
 		"checkJs": true,
@@ -10,5 +10,8 @@
 		"sourceMap": true,
 		"strict": true,
 		"moduleResolution": "bundler"
-	}
+	},
+	// Kit 3's tsconfig adds the whole frontend folder ("*"), which pulls in
+	// eslint.config.js and dist; only the app and the Vite config are checked.
+	"include": ["src", "test", "vite.config.ts"]
 }

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { page } from '$app/stores';
+	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
 	import { Sun, Moon, Info } from 'lucide-svelte';
 	import { authStore } from '$lib/auth.svelte';
@@ -23,18 +23,18 @@
 		<!-- Right side -->
 		<div class="flex items-center flex-wrap gap-2">
 			<Button
-				variant={$page.url.pathname === '/' ? 'default' : 'ghost'}
+				variant={page.url.pathname === '/' ? 'default' : 'ghost'}
 				size="sm"
 				onclick={() => goto('/')}
 			>Search</Button>
 			<Button
-				variant={$page.url.pathname === '/requests' ? 'default' : 'ghost'}
+				variant={page.url.pathname === '/requests' ? 'default' : 'ghost'}
 				size="sm"
 				onclick={() => goto('/requests')}
 			>{authStore.isAdmin ? 'All Requests' : 'My Requests'}</Button>
 			{#if authStore.isAdmin}
 				<Button
-					variant={$page.url.pathname === '/library' ? 'default' : 'ghost'}
+					variant={page.url.pathname === '/library' ? 'default' : 'ghost'}
 					size="sm"
 					onclick={() => goto('/library')}
 				>Library</Button>
