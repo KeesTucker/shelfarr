@@ -1,0 +1,33 @@
+name: Release
+
+on:
+  push:
+    branches: [master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  # release-please keeps a release PR open from the Conventional Commits on
+  # master; merging it tags vX.Y.Z and makes the GitHub release, and the tag
+  # push runs docker.yml, which publishes the versioned image. It runs as
+  # kees-bump-bot: Actions here may not open PRs, and a tag the Actions token
+  # pushes wouldn't trigger docker.yml. Its client ID and key are set by
+  # homelab's tofu/github/actions.tf.
+  release-please:
+    name: release-please
+    runs-on: ubuntu-latest
+    steps:
+      - id: app-token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.BUMP_BOT_CLIENT_ID }}
+          private-key: ${{ secrets.BUMP_BOT_PRIVATE_KEY }}
+
+      - uses: googleapis/release-please-action@v5
+        with:
+          token: ${{ steps.app-token.outputs.token }}
