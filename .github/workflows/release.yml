@@ -2,7 +2,7 @@ name: Release
 
 on:
   push:
-    branches: [master]
+    branches: [main]
 
 permissions:
   contents: read
@@ -13,7 +13,7 @@ concurrency:
 
 jobs:
   # release-please keeps a release PR open from the Conventional Commits on
-  # master; merging it tags vX.Y.Z and makes the GitHub release, and the tag
+  # main; merging it tags vX.Y.Z and makes the GitHub release, and the tag
   # push runs docker.yml, which publishes the versioned image. It runs as
   # kees-bump-bot: Actions here may not open PRs, and a tag the Actions token
   # pushes wouldn't trigger docker.yml. Its client ID and key are set by
