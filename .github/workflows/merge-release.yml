@@ -1,0 +1,31 @@
+name: Merge Release
+
+on:
+  schedule:
+    # 12:00 UTC = 01:00 NZDT / 00:00 NZST.
+    - cron: "0 12 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # Ships whatever release-please has queued, nightly. Runs as kees-bump-bot:
+  # a merge by the Actions token wouldn't run release.yml, so the release
+  # would never be tagged. Auto-merge rather than a plain merge, so the
+  # release PR still waits for its required checks.
+  merge-release:
+    runs-on: ubuntu-latest
+    steps:
+      - id: app-token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.BUMP_BOT_CLIENT_ID }}
+          private-key: ${{ secrets.BUMP_BOT_PRIVATE_KEY }}
+
+      - env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          for pr in $(gh pr list -R "$GITHUB_REPOSITORY" --label "autorelease: pending" --state open --json number --jq '.[].number'); do
+            gh pr merge "$pr" -R "$GITHUB_REPOSITORY" --auto --squash
+          done
