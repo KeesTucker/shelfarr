@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.2](https://github.com/KeesTucker/shelfarr/compare/v0.1.1...v0.1.2) (2026-11-20)
+
+
+### Bug Fixes
+
+* **deps:** update module modernc.org/sqlite to v1.62.0 ([#134](https://github.com/KeesTucker/shelfarr/issues/134)) ([ffdb02a](https://github.com/KeesTucker/shelfarr/commit/ffdb02a33f6428ec4e7122f4b3e74c662e88252f))
+
 ## [0.1.1](https://github.com/KeesTucker/shelfarr/compare/v0.1.0...v0.1.1) (2026-11-04)
 
 
